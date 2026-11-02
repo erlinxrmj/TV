@@ -96,7 +96,7 @@ public class LoginActivity extends Activity {
         logo.setImageResource(R.mipmap.ic_launcher);
         left.addView(logo, Ui.lin(Ui.dp(this, 84), Ui.dp(this, 84)));
         TextView h = Ui.text(this, 44, Ui.TEXT, Ui.bold(this));
-        h.setText(editing != null ? "Login bearbeiten" : "Willkommen bei\nAntenne");
+        h.setText(editing != null ? "Login bearbeiten" : "Willkommen bei\nTV");
         h.setLetterSpacing(-0.02f);
         h.setLineSpacing(0, 1.05f);
         left.addView(h, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), 0, Ui.dp(this, 24), 0, 0));

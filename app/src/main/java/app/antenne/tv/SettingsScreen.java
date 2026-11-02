@@ -173,11 +173,11 @@ public class SettingsScreen extends Screen {
         } catch (Exception ignored) {
         }
         String fv = version;
-        item("Über Antenne", () -> "Version " + fv, () -> new AlertDialog.Builder(a)
-                .setTitle("Antenne")
+        item("Über TV", () -> "Version " + fv, () -> new AlertDialog.Builder(a)
+                .setTitle("TV")
                 .setMessage("Moderne IPTV-App für Android TV.\n\nEntwickelt von Erlin Ramaj.\n\n"
                         + "Fehlende Senderlogos stammen aus der offenen iptv-org-Datenbank.\n"
-                        + "Antenne ist nur ein Player – Inhalte kommen von deinem IPTV-Anbieter.")
+                        + "TV ist nur ein Player – Inhalte kommen von deinem IPTV-Anbieter.")
                 .setPositiveButton("OK", null)
                 .show());
     }
