@@ -124,12 +124,22 @@ public final class Prefs {
         sp.edit().putString("live_format", f).apply();
     }
 
+    /**
+     * Vorschau im Live-TV. Bei Abos mit nur einer Verbindung automatisch aus, sonst würde
+     * die Vorschau die einzige Verbindung belegen und der Vollbild-Player hängen.
+     */
     public static boolean preview() {
-        return sp.getBoolean("preview", true);
+        if (!sp.getBoolean("preview", true)) return false;
+        Xtream.Account a = Library.get().account;
+        return a == null || a.maxConnections <= 0 || a.maxConnections > 1;
     }
 
     public static void setPreview(boolean b) {
         sp.edit().putBoolean("preview", b).apply();
+    }
+
+    public static boolean previewSetting() {
+        return sp.getBoolean("preview", true);
     }
 
     public static boolean cleanNames() {

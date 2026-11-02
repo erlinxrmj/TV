@@ -84,6 +84,22 @@ public class PlayerActivity extends Activity {
         }
     };
     private final Runnable zapRunnable = this::playCurrentChannel;
+    /** Wenn ein Sender nach 12 s noch lädt: anderes Format probieren bzw. Meldung zeigen. */
+    private final Runnable stallCheck = () -> {
+        if (player == null || !"live".equals(type)) return;
+        if (player.getPlaybackState() == Player.STATE_READY) return;
+        if (tryAltFormat()) {
+            Bg.later(this.stallCheckRef(), 12_000);
+            return;
+        }
+        spinner.setVisibility(View.GONE);
+        errorView.setText("Dieser Sender antwortet gerade nicht.\nOK = nochmal versuchen   ·   ▲▼ = anderer Sender");
+        errorView.setVisibility(View.VISIBLE);
+    };
+
+    private Runnable stallCheckRef() {
+        return stallCheck;
+    }
     private int seekRepeat;
     private boolean wasPaused;
 
@@ -332,17 +348,7 @@ public class PlayerActivity extends Activity {
                 return;
             }
             // 2) Anderes Format probieren (TS ↔ HLS)
-            if (!triedAltFormat && ch.url == null && Library.get().xtream != null) {
-                triedAltFormat = true;
-                Xtream x = Library.get().xtream;
-                String alt = "ts".equals(Prefs.liveFormat())
-                        ? x.base + "/live/" + android.net.Uri.encode(x.user) + "/" + android.net.Uri.encode(x.pass) + "/" + ch.id + ".m3u8"
-                        : x.base + "/live/" + android.net.Uri.encode(x.user) + "/" + android.net.Uri.encode(x.pass) + "/" + ch.id + ".ts";
-                player.setMediaItem(Players.item(alt));
-                player.prepare();
-                player.play();
-                return;
-            }
+            if (tryAltFormat()) return;
         } else if (retries < 1) {
             retries++;
             long pos = Math.max(0, player.getCurrentPosition());
@@ -353,6 +359,21 @@ public class PlayerActivity extends Activity {
         }
         errorView.setText(errorText(error));
         errorView.setVisibility(View.VISIBLE);
+    }
+
+    /** Probiert einmal das andere Live-Format (TS ↔ HLS). */
+    private boolean tryAltFormat() {
+        if (triedAltFormat || player == null) return false;
+        Model.Channel ch = channels.get(index);
+        Xtream x = Library.get().xtream;
+        if (ch.url != null || x == null) return false;
+        triedAltFormat = true;
+        String ext = "ts".equals(Prefs.liveFormat()) ? ".m3u8" : ".ts";
+        String alt = x.base + "/live/" + android.net.Uri.encode(x.user) + "/" + android.net.Uri.encode(x.pass) + "/" + ch.id + ext;
+        player.setMediaItem(Players.item(alt));
+        player.prepare();
+        player.play();
+        return true;
     }
 
     private static String errorText(PlaybackException e) {
@@ -385,6 +406,8 @@ public class PlayerActivity extends Activity {
         player.play();
         Store.addRecent(ch.key());
         showLiveBar();
+        Bg.cancel(stallCheck);
+        Bg.later(stallCheck, 12_000);
     }
 
     private void zap(int d) {
@@ -393,6 +416,7 @@ public class PlayerActivity extends Activity {
         triedAltFormat = false;
         retries = 0;
         if (player != null) player.stop();
+        Bg.cancel(stallCheck);
         // Kurz warten: beim schnellen Durchschalten nicht jeden Sender laden
         showLiveBar();
         Bg.cancel(zapRunnable);
@@ -923,6 +947,7 @@ public class PlayerActivity extends Activity {
         super.onPause();
         savePosition();
         Bg.cancel(saveTick);
+        Bg.cancel(stallCheck);
         if (player != null) player.pause();
         wasPaused = true;
     }
@@ -947,6 +972,7 @@ public class PlayerActivity extends Activity {
         Bg.cancel(saveTick);
         Bg.cancel(hideBars);
         Bg.cancel(zapRunnable);
+        Bg.cancel(stallCheck);
         if (player != null) {
             playerView.setPlayer(null);
             player.release();
