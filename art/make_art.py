@@ -1,4 +1,4 @@
-"""Erzeugt App-Icon und TV-Banner für Antenne.
+"""Erzeugt App-Icon und TV-Banner für TV.
 
 Aufruf: python3 art/make_art.py <pfad-zu-inter-bold>
 """
@@ -30,7 +30,7 @@ def gradient(w, h, a, b, diagonal=True):
 
 
 def mark(size):
-    """Das Antenne-Zeichen: ein Punkt mit zwei Funkbögen, wie ein Signal."""
+    """Das TV-Zeichen: ein Punkt mit zwei Funkbögen, wie ein Signal."""
     s = size * 4
     mask = Image.new("L", (s, s), 0)
     d = ImageDraw.Draw(mask)
@@ -72,7 +72,7 @@ def banner(path, font_path):
     img = gradient(w, h, BG_TOP, BG_BOTTOM, diagonal=False)
     mk = mark(84)
     font = ImageFont.truetype(font_path, 44)
-    text = "Antenne"
+    text = "TV"
     tw = ImageDraw.Draw(img).textlength(text, font=font)
     total = 84 + 6 + tw
     x = int((w - total) / 2)

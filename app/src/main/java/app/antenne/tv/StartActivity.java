@@ -53,7 +53,7 @@ public class StartActivity extends Activity {
         col.addView(logo, Ui.lin(Ui.dp(this, 112), Ui.dp(this, 112)));
 
         TextView title = Ui.text(this, 40, Ui.TEXT, Ui.bold(this));
-        title.setText("Antenne");
+        title.setText("TV");
         title.setLetterSpacing(-0.02f);
         col.addView(title, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), 0, Ui.dp(this, 18), 0, 0));
 
