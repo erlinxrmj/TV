@@ -1,0 +1,166 @@
+package app.antenne.tv;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/** Gespeicherte Profile (Logins) und Einstellungen. */
+public final class Prefs {
+
+    private static SharedPreferences sp;
+
+    private Prefs() {}
+
+    static void init(Context c) {
+        sp = c.getSharedPreferences("antenne", Context.MODE_PRIVATE);
+    }
+
+    // ---------- Profile ----------
+
+    public static final class Profile {
+        public String id;
+        public String name;
+        public String type; // "xtream" oder "m3u"
+        public String url;
+        public String user;
+        public String pass;
+        public String epgUrl;
+
+        public boolean isXtream() {
+            return "xtream".equals(type);
+        }
+
+        JSONObject toJson() {
+            JSONObject o = new JSONObject();
+            try {
+                o.put("id", id);
+                o.put("name", name);
+                o.put("type", type);
+                o.put("url", url);
+                o.put("user", user == null ? "" : user);
+                o.put("pass", pass == null ? "" : pass);
+                o.put("epg", epgUrl == null ? "" : epgUrl);
+            } catch (Exception ignored) {
+            }
+            return o;
+        }
+
+        static Profile fromJson(JSONObject o) {
+            Profile p = new Profile();
+            p.id = o.optString("id");
+            p.name = o.optString("name");
+            p.type = o.optString("type", "xtream");
+            p.url = o.optString("url");
+            p.user = o.optString("user");
+            p.pass = o.optString("pass");
+            p.epgUrl = o.optString("epg");
+            return p;
+        }
+    }
+
+    public static List<Profile> profiles() {
+        List<Profile> out = new ArrayList<>();
+        try {
+            JSONArray a = new JSONArray(sp.getString("profiles", "[]"));
+            for (int i = 0; i < a.length(); i++) out.add(Profile.fromJson(a.getJSONObject(i)));
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    private static void saveAll(List<Profile> list) {
+        JSONArray a = new JSONArray();
+        for (Profile p : list) a.put(p.toJson());
+        sp.edit().putString("profiles", a.toString()).apply();
+    }
+
+    public static void saveProfile(Profile p) {
+        List<Profile> list = profiles();
+        boolean found = false;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).id.equals(p.id)) {
+                list.set(i, p);
+                found = true;
+            }
+        }
+        if (!found) list.add(p);
+        saveAll(list);
+    }
+
+    public static void deleteProfile(String id) {
+        List<Profile> list = profiles();
+        List<Profile> keep = new ArrayList<>();
+        for (Profile p : list) if (!p.id.equals(id)) keep.add(p);
+        saveAll(keep);
+        if (id.equals(sp.getString("active", ""))) {
+            sp.edit().putString("active", keep.isEmpty() ? "" : keep.get(0).id).apply();
+        }
+    }
+
+    public static Profile active() {
+        String id = sp.getString("active", "");
+        List<Profile> list = profiles();
+        for (Profile p : list) if (p.id.equals(id)) return p;
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    public static void setActive(String id) {
+        sp.edit().putString("active", id).apply();
+    }
+
+    // ---------- Einstellungen ----------
+
+    /** Live-Format: "ts" (MPEG-TS) oder "m3u8" (HLS). */
+    public static String liveFormat() {
+        return sp.getString("live_format", "ts");
+    }
+
+    public static void setLiveFormat(String f) {
+        sp.edit().putString("live_format", f).apply();
+    }
+
+    public static boolean preview() {
+        return sp.getBoolean("preview", true);
+    }
+
+    public static void setPreview(boolean b) {
+        sp.edit().putBoolean("preview", b).apply();
+    }
+
+    public static boolean cleanNames() {
+        return sp.getBoolean("clean_names", true);
+    }
+
+    public static void setCleanNames(boolean b) {
+        sp.edit().putBoolean("clean_names", b).apply();
+    }
+
+    public static boolean autoNext() {
+        return sp.getBoolean("auto_next", true);
+    }
+
+    public static void setAutoNext(boolean b) {
+        sp.edit().putBoolean("auto_next", b).apply();
+    }
+
+    public static String userAgent() {
+        return sp.getString("ua", "VLC/3.0.20 LibVLC/3.0.20");
+    }
+
+    public static void setUserAgent(String ua) {
+        sp.edit().putString("ua", ua).apply();
+    }
+
+    public static String lastTab() {
+        return sp.getString("last_tab", "live");
+    }
+
+    public static void setLastTab(String t) {
+        sp.edit().putString("last_tab", t).apply();
+    }
+}
