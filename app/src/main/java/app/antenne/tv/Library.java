@@ -124,13 +124,28 @@ public final class Library {
                 account = xtream.login();
             } catch (IOException e) {
                 // Ohne Internet trotzdem mit dem Cache starten
-                if (!fresh(new File(dir, "live.json"))) throw e;
+                if (!new File(dir, "live.json").exists()) throw e;
             }
-            progress.step("Sender laden …");
             File lc = new File(dir, "live_cats.json");
             File ls = new File(dir, "live.json");
-            if (!fresh(lc)) Http.download(xtream.api("get_live_categories", null), lc);
-            if (!fresh(ls)) Http.download(xtream.api("get_live_streams", null), ls);
+            boolean haveCache = lc.exists() && lc.length() > 2 && ls.exists() && ls.length() > 2;
+            boolean stale = !fresh(lc) || !fresh(ls);
+            if (stale && haveCache) {
+                // Sofort mit der gespeicherten Liste starten, im Hintergrund aktualisieren
+                Xtream x = xtream;
+                Bg.run(() -> {
+                    try {
+                        Http.download(x.api("get_live_categories", null), lc);
+                        Http.download(x.api("get_live_streams", null), ls);
+                    } catch (Exception ignored) {
+                    }
+                });
+            } else if (stale) {
+                downloadWithProgress(progress, "Sender laden",
+                        new String[]{xtream.api("get_live_categories", null), xtream.api("get_live_streams", null)},
+                        new File[]{lc, ls});
+            }
+            progress.step("Sender werden sortiert …");
             List<Model.Category> cats = xtream.categories(lc);
             List<Model.Channel> chs = xtream.channels(ls);
             fill(liveCats, cats, chs, true);
@@ -140,9 +155,20 @@ public final class Library {
             Bg.run(() -> loadXtreamVod(gen, dir));
             if (p.epgUrl != null && !p.epgUrl.trim().isEmpty()) startXmltv(p.epgUrl.trim(), dir, gen);
         } else {
-            progress.step("Playlist laden …");
             File pl = new File(dir, "playlist.m3u");
-            if (!fresh(pl)) Http.download(p.url.trim(), pl);
+            if (!fresh(pl)) {
+                if (pl.exists() && pl.length() > 2) {
+                    String u = p.url.trim();
+                    Bg.run(() -> {
+                        try {
+                            Http.download(u, pl);
+                        } catch (Exception ignored) {
+                        }
+                    });
+                } else {
+                    downloadWithProgress(progress, "Playlist laden", new String[]{p.url.trim()}, new File[]{pl});
+                }
+            }
             progress.step("Playlist lesen …");
             M3u m = M3u.parse(pl);
             if (m.channels.isEmpty() && m.movies.isEmpty() && m.series.isEmpty()) {
@@ -163,6 +189,51 @@ public final class Library {
         Bg.run(() -> {
             if (Logos.fill(channels, dir)) fire("logos", gen);
         });
+    }
+
+    /**
+     * Lädt mehrere Dateien gleichzeitig und zeigt jede Sekunde den Fortschritt
+     * („Sender laden … 8,4 MB · 23 s“), damit man sieht, dass es vorangeht.
+     */
+    private static void downloadWithProgress(Progress progress, String label, String[] urls, File[] files) throws IOException {
+        final long[] bytes = new long[urls.length];
+        final IOException[] error = new IOException[1];
+        final long start = System.currentTimeMillis();
+        Thread[] threads = new Thread[urls.length];
+        for (int i = 0; i < urls.length; i++) {
+            final int idx = i;
+            threads[i] = new Thread(() -> {
+                try {
+                    Http.download(urls[idx], files[idx], b -> bytes[idx] = b);
+                } catch (IOException e) {
+                    synchronized (error) {
+                        if (error[0] == null) error[0] = e;
+                    }
+                }
+            });
+            threads[i].start();
+        }
+        progress.step(label + " …");
+        while (true) {
+            boolean alive = false;
+            for (Thread t : threads) {
+                try {
+                    t.join(1000);
+                } catch (InterruptedException ignored) {
+                }
+                alive |= t.isAlive();
+            }
+            if (!alive) break;
+            long total = 0;
+            for (long b : bytes) total += b;
+            long secs = (System.currentTimeMillis() - start) / 1000;
+            String size = total > 0 ? String.format(java.util.Locale.GERMANY, " %.1f MB", total / 1048576.0) : "";
+            String msg = label + " …" + size + "  ·  " + secs + " s";
+            if (total == 0 && secs >= 15) msg += "\nDer Server bereitet die Liste vor – bei grossen Anbietern dauert das.";
+            else if (secs >= 45) msg += "\nGrosse Senderliste – nur beim ersten Start so langsam.";
+            progress.step(msg);
+        }
+        if (error[0] != null) throw error[0];
     }
 
     private void loadXtreamVod(int gen, File dir) {

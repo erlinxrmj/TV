@@ -48,8 +48,17 @@ public final class Http {
         }
     }
 
+    /** Meldet, wie viele Bytes bisher angekommen sind. */
+    public interface Listener {
+        void onBytes(long bytes);
+    }
+
     /** Lädt in eine Datei (zuerst .tmp, dann umbenennen, damit der Cache nie halb ist). */
     public static void download(String url, File target) throws IOException {
+        download(url, target, null);
+    }
+
+    public static void download(String url, File target, Listener listener) throws IOException {
         File tmp = new File(target.getPath() + ".tmp");
         try (Response r = client().newCall(req(url)).execute()) {
             if (!r.isSuccessful()) throw new IOException("HTTP " + r.code());
@@ -58,7 +67,12 @@ public final class Http {
             try (InputStream in = b.byteStream(); OutputStream out = new FileOutputStream(tmp)) {
                 byte[] buf = new byte[64 * 1024];
                 int n;
-                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                long total = 0;
+                while ((n = in.read(buf)) > 0) {
+                    out.write(buf, 0, n);
+                    total += n;
+                    if (listener != null) listener.onBytes(total);
+                }
             }
         }
         if (target.exists()) target.delete();
