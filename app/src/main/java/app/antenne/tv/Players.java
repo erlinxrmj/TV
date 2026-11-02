@@ -12,6 +12,8 @@ import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.extractor.DefaultExtractorsFactory;
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory;
 
 import java.util.Locale;
 
@@ -26,7 +28,13 @@ public final class Players {
                 .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(15_000)
                 .setReadTimeoutMs(20_000);
-        DefaultMediaSourceFactory msf = new DefaultMediaSourceFactory(c).setDataSourceFactory(http);
+        // Viele IPTV-Streams markieren ihre Schlüsselbilder nicht sauber: ohne diese
+        // Einstellungen wartet der Player endlos auf ein Startbild (Dauerladen).
+        DefaultExtractorsFactory extractors = new DefaultExtractorsFactory()
+                .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
+                        | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
+                .setConstantBitrateSeekingEnabled(true);
+        DefaultMediaSourceFactory msf = new DefaultMediaSourceFactory(http, extractors);
         DefaultLoadControl lc = new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(live ? 8_000 : 15_000, live ? 30_000 : 60_000, 1_500, 3_000)
                 .build();
