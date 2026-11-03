@@ -66,6 +66,22 @@ public class MainActivity extends Activity implements Library.Listener {
             Screen s = screens.get(current);
             if (s != null) s.focusFirst();
         });
+        String crash = App.takeCrash();
+        if (crash != null) {
+            TextView msg = Ui.text(this, 12, 0xFF333333, Ui.medium(this));
+            msg.setText(crash);
+            msg.setTextIsSelectable(false);
+            int p = Ui.dp(this, 20);
+            msg.setPadding(p, p, p, p);
+            android.widget.ScrollView sv = new android.widget.ScrollView(this);
+            sv.addView(msg);
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("Die App ist zuletzt abgestürzt")
+                    .setMessage("Mach bitte ein Foto davon und schick es Claude – dann lässt sich der Fehler beheben.")
+                    .setView(sv)
+                    .setPositiveButton("OK", null)
+                    .show();
+        }
     }
 
     @Override

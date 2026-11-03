@@ -475,16 +475,20 @@ public class PlayerActivity extends Activity implements Engine.Callback {
 
     private void playCurrentChannel() {
         Model.Channel ch = channels.get(index);
+        int wanted = manualQuality && variant < variants.size() ? Library.qualityRank(variants.get(variant).rawName) : 2;
         variants = Library.get().variants(ch);
         if (!manualQuality) {
-            variant = 0;
+            // Mit genau der Fassung starten, die gewählt wurde; gesenkt wird nur bei Rucklern
+            variant = Math.max(0, variants.indexOf(ch));
             int cap = Prefs.maxQuality();
             if (cap > 0) {
                 int capRank = cap >= 2160 ? 4 : cap >= 1080 ? 3 : cap >= 720 ? 2 : 1;
-                for (int i = 0; i < variants.size(); i++) {
-                    if (Library.qualityRank(variants.get(i).rawName) <= capRank) {
-                        variant = i;
-                        break;
+                if (Library.qualityRank(variants.get(variant).rawName) > capRank) {
+                    for (int i = variant; i < variants.size(); i++) {
+                        if (Library.qualityRank(variants.get(i).rawName) <= capRank) {
+                            variant = i;
+                            break;
+                        }
                     }
                 }
             }
@@ -492,7 +496,6 @@ public class PlayerActivity extends Activity implements Engine.Callback {
             if (remembered != null && remembered < variants.size()) variant = Math.max(variant, remembered);
         } else {
             // Bei manueller Wahl dieselbe Stufe auch beim nächsten Sender versuchen
-            int wanted = variant < variants.size() ? Library.qualityRank(variants.get(variant).rawName) : 2;
             variant = 0;
             for (int i = 0; i < variants.size(); i++) {
                 if (Library.qualityRank(variants.get(i).rawName) <= wanted) {
