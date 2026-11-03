@@ -343,6 +343,9 @@ public final class Library {
     }
 
     private void clearAll() {
+        synchronized (this) {
+            variantMap = null;
+        }
         liveCats.clear();
         channels.clear();
         movieCats.clear();
@@ -407,6 +410,61 @@ public final class Library {
             for (Model.Category c : liveCats) if (c.id.equals(id)) return c.name;
         }
         return "";
+    }
+
+    // ---------- Qualitätsstufen eines Senders ----------
+
+    private Map<String, List<Model.Channel>> variantMap;
+
+    /** Qualität aus dem Namen: 4 = 4K, 3 = FHD, 2 = HD, 1 = SD. */
+    public static int qualityRank(String raw) {
+        String u = raw == null ? "" : raw.toUpperCase(java.util.Locale.ROOT);
+        if (u.matches(".*\\b(4K|UHD|2160P?)\\b.*")) return 4;
+        if (u.matches(".*\\b(FHD|FULL ?HD|1080P?)\\b.*")) return 3;
+        if (u.matches(".*\\b(SD|LOW|480P?|360P?)\\b.*")) return 1;
+        return 2;
+    }
+
+    public static String qualityLabel(int rank) {
+        switch (rank) {
+            case 4: return "4K";
+            case 3: return "Full HD";
+            case 1: return "SD";
+            default: return "HD";
+        }
+    }
+
+    /**
+     * Alle Fassungen desselben Senders (z. B. „ZDF FHD“, „ZDF HD“, „ZDF SD“), beste zuerst.
+     * Damit kann die Qualität automatisch gesenkt oder von Hand gewählt werden.
+     */
+    public synchronized List<Model.Channel> variants(Model.Channel c) {
+        if (variantMap == null) {
+            variantMap = new HashMap<>();
+            for (Model.Channel x : channels) {
+                String k = Names.key(x.rawName);
+                if (k.isEmpty()) continue;
+                List<Model.Channel> l = variantMap.get(k);
+                if (l == null) variantMap.put(k, l = new ArrayList<>());
+                l.add(x);
+            }
+            for (List<Model.Channel> l : variantMap.values()) {
+                Collections.sort(l, (a, b) -> Integer.compare(qualityRank(b.rawName), qualityRank(a.rawName)));
+            }
+        }
+        List<Model.Channel> l = variantMap.get(Names.key(c.rawName));
+        if (l == null || l.size() < 2) {
+            List<Model.Channel> one = new ArrayList<>();
+            one.add(c);
+            return one;
+        }
+        // Nur echte Qualitätsunterschiede: höchstens eine Fassung pro Stufe
+        List<Model.Channel> out = new ArrayList<>();
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        if (seen.add(qualityRank(c.rawName))) out.add(c);
+        for (Model.Channel x : l) if (x != c && seen.add(qualityRank(x.rawName))) out.add(x);
+        Collections.sort(out, (a, b) -> Integer.compare(qualityRank(b.rawName), qualityRank(a.rawName)));
+        return out;
     }
 
     /** Neueste Filme über alle Kategorien. */
