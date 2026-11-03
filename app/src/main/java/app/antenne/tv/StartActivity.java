@@ -23,6 +23,7 @@ public class StartActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        getWindow().setBackgroundDrawable(Ui.background());
         Prefs.Profile p = Prefs.active();
         if (p == null) {
             startActivity(new Intent(this, LoginActivity.class));
@@ -41,8 +42,7 @@ public class StartActivity extends Activity {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF1C1E2C, 0xFF0B0C12, 0xFF120C1A}));
+        root.setBackground(Ui.background());
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);

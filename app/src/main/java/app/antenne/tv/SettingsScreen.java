@@ -30,19 +30,15 @@ public class SettingsScreen extends Screen {
         Context c = a;
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(Ui.dp(c, 48), Ui.dp(c, 92), Ui.dp(c, 48), Ui.dp(c, 24));
-        row.setClipChildren(false);
-        row.setClipToPadding(false);
+        row.setPadding(Ui.dp(c, 48), Ui.dp(c, 84), Ui.dp(c, 48), Ui.dp(c, 24));
 
         // Links: Einstellungen
         ScrollView sv = new ScrollView(c);
         sv.setVerticalScrollBarEnabled(false);
-        sv.setClipChildren(false);
-        sv.setClipToPadding(false);
+        sv.setSmoothScrollingEnabled(true);
         list = new LinearLayout(c);
         list.setOrientation(LinearLayout.VERTICAL);
-        list.setPadding(Ui.dp(c, 8), Ui.dp(c, 4), Ui.dp(c, 8), Ui.dp(c, 60));
-        list.setClipChildren(false);
+        list.setPadding(Ui.dp(c, 10), Ui.dp(c, 10), Ui.dp(c, 10), Ui.dp(c, 60));
         sv.addView(list);
         row.addView(sv, Ui.lin(0, Ui.MATCH, 1f));
 
@@ -51,7 +47,7 @@ public class SettingsScreen extends Screen {
         card.setOrientation(LinearLayout.VERTICAL);
         int p = Ui.dp(c, 28);
         card.setPadding(p, p, p, p);
-        card.setBackground(Ui.round(0x1AFFFFFF, Ui.dp(c, 26)));
+        card.setBackground(Ui.round(Ui.GLASS, Ui.dp(c, 26)));
         TextView lbl = Ui.text(c, 12, Ui.TEXT3, Ui.bold(c));
         lbl.setText("DEIN ABO");
         lbl.setLetterSpacing(0.12f);
@@ -62,7 +58,7 @@ public class SettingsScreen extends Screen {
         card.addView(aboBig, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), 0, Ui.dp(c, 18), 0, 0));
         aboSub = Ui.text(c, 15, Ui.TEXT2, Ui.medium(c));
         card.addView(aboSub, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), 0, Ui.dp(c, 6), 0, 0));
-        aboBar = new Ui.Bar(c, 0x26FFFFFF, Ui.OK);
+        aboBar = new Ui.Bar(c, Ui.ink(0x26), Ui.OK);
         card.addView(aboBar, Ui.margins(Ui.lin(Ui.MATCH, Ui.dp(c, 6)), 0, Ui.dp(c, 16), 0, 0));
         aboDetails = Ui.text(c, 14, Ui.TEXT2, Ui.medium(c));
         aboDetails.setLineSpacing(Ui.dp(c, 6), 1f);
@@ -99,11 +95,11 @@ public class SettingsScreen extends Screen {
         if (value != null) val.setText(value.get());
         v.addView(val);
         float r = Ui.dp(c, 16);
-        v.setBackground(Ui.round(0x12FFFFFF, r));
+        v.setBackground(Ui.round(Ui.GLASS_LO, r));
         Ui.lift(v, 1.03f, r, (view, has) -> {
-            view.setBackground(Ui.round(has ? 0xFFFFFFFF : 0x12FFFFFF, r));
-            l.setTextColor(has ? 0xFF111111 : Ui.TEXT);
-            val.setTextColor(has ? 0x99111111 : Ui.TEXT2);
+            view.setBackground(Ui.round(has ? Ui.FOCUS_BG : Ui.GLASS_LO, r));
+            l.setTextColor(has ? Ui.FOCUS_FG : Ui.TEXT);
+            val.setTextColor(has ? Ui.focusInk(0x99) : Ui.TEXT2);
         });
         v.setOnClickListener(x -> {
             action.run();
@@ -115,6 +111,17 @@ public class SettingsScreen extends Screen {
     }
 
     private void buildList() {
+        int keep = -1;
+        View f = a.getCurrentFocus();
+        for (int i = 0; i < list.getChildCount(); i++) if (list.getChildAt(i) == f) keep = i;
+        buildListInner();
+        if (keep >= 0 && keep < list.getChildCount()) {
+            View v = list.getChildAt(keep);
+            v.post(v::requestFocus);
+        }
+    }
+
+    private void buildListInner() {
         list.removeAllViews();
         firstRow = null;
         Prefs.Profile p = Library.get().profile;
@@ -137,16 +144,54 @@ public class SettingsScreen extends Screen {
         });
 
         section("Wiedergabe");
+        item("Player", () -> Prefs.engineName(Prefs.engine()), () -> {
+            String[] ids = Prefs.ENGINE_IDS;
+            int sel = java.util.Arrays.asList(ids).indexOf(Prefs.engine());
+            Ui.choose(a, "Player", "Wenn Sender ruckeln oder nicht starten, hilft oft ein anderer Player. "
+                            + "„VLC-Engine“ spielt fast alles ab.",
+                    Prefs.ENGINE_NAMES, sel, i -> {
+                        Prefs.setEngine(ids[i]);
+                        buildList();
+                    });
+        });
+        item("Puffer", () -> Prefs.BUFFER_NAMES[Prefs.buffer()].split(" ·")[0], () ->
+                Ui.choose(a, "Puffer", "Grösserer Puffer = etwas längerer Start, dafür weniger Hänger.",
+                        Prefs.BUFFER_NAMES, Prefs.buffer(), i -> {
+                            Prefs.setBuffer(i);
+                            buildList();
+                        }));
+        item("Qualität", () -> Prefs.qualityName(Prefs.maxQuality()), () -> {
+            int[] hs = {0, 2160, 1080, 720, 480};
+            String[] names = {"Automatisch (empfohlen)", "Bis 4K", "Bis 1080p (Full HD)", "Bis 720p (HD)", "Bis 480p (spart Daten)"};
+            int sel = 0;
+            for (int i = 0; i < hs.length; i++) if (hs[i] == Prefs.maxQuality()) sel = i;
+            Ui.choose(a, "Qualität", "„Automatisch“ passt die Qualität laufend an deine Verbindung an, "
+                    + "damit der Stream flüssig bleibt. Im Player kannst du sie jederzeit umstellen.", names, sel, i -> {
+                Prefs.setMaxQuality(hs[i]);
+                buildList();
+            });
+        });
         if (p.isXtream()) {
             item("Live-Format", () -> "ts".equals(Prefs.liveFormat()) ? "MPEG-TS" : "HLS (m3u8)", () -> {
                 Prefs.setLiveFormat("ts".equals(Prefs.liveFormat()) ? "m3u8" : "ts");
-                Ui.toast(a, "Gilt ab dem nächsten Senderwechsel");
+                buildList();
             });
         }
-        item("Vorschau im Live-TV", () -> Prefs.preview() ? "An" : "Aus", () -> Prefs.setPreview(!Prefs.preview()));
         item("Nächste Folge automatisch", () -> Prefs.autoNext() ? "An" : "Aus", () -> Prefs.setAutoNext(!Prefs.autoNext()));
 
         section("Darstellung");
+        item("Erscheinungsbild", () -> Prefs.darkMode() ? "Dunkel" : "Hell", () ->
+                Ui.choose(a, "Erscheinungsbild", null, new String[]{"Dunkel", "Hell"}, Prefs.darkMode() ? 0 : 1, i -> {
+                    boolean dark = i == 0;
+                    if (dark == Prefs.darkMode()) return;
+                    Prefs.setDarkMode(dark);
+                    Ui.apply(dark);
+                    Intent in = new Intent(a, MainActivity.class);
+                    in.putExtra("tab", "settings");
+                    in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    a.startActivity(in);
+                    a.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                }));
         item("Sendernamen aufräumen", () -> Prefs.cleanNames() ? "An" : "Aus", () -> {
             Prefs.setCleanNames(!Prefs.cleanNames());
             Ui.toast(a, "Wird beim nächsten Laden übernommen");
@@ -193,14 +238,11 @@ public class SettingsScreen extends Screen {
     private void chooseUa() {
         String[] names = {"VLC (empfohlen)", "IPTV Smarters", "TiviMate", "Standard"};
         String[] values = {"VLC/3.0.20 LibVLC/3.0.20", "IPTVSmartersPlayer", "TiviMate/4.7.0 (Android 11)", "okhttp/4.12.0"};
-        new AlertDialog.Builder(a)
-                .setTitle("User-Agent")
-                .setItems(names, (d, w) -> {
-                    Prefs.setUserAgent(values[w]);
-                    Ui.toast(a, "Gespeichert – manche Anbieter erlauben nur bestimmte Apps");
-                    buildList();
-                })
-                .show();
+        int sel = java.util.Arrays.asList(values).indexOf(Prefs.userAgent());
+        Ui.choose(a, "User-Agent", "Manche Anbieter erlauben nur bestimmte Apps.", names, Math.max(0, sel), w -> {
+            Prefs.setUserAgent(values[w]);
+            buildList();
+        });
     }
 
     private void updateAccount() {
@@ -238,7 +280,7 @@ public class SettingsScreen extends Screen {
                 aboBar.setVisibility(View.VISIBLE);
                 // Balken: Anteil eines Jahres, der noch übrig ist
                 aboBar.setProgress(Math.max(0, Math.min(1f, days / 365f)));
-                aboBar.setColors(0x26FFFFFF, days <= 7 ? (days < 0 ? Ui.LIVE : Ui.WARN) : Ui.OK);
+                aboBar.setColors(Ui.ink(0x26), days <= 7 ? (days < 0 ? Ui.LIVE : Ui.WARN) : Ui.OK);
             }
             d.append("Status:  ").append(statusDe(acc.status)).append(acc.trial ? " (Testzugang)" : "").append('\n');
             if (acc.maxConnections > 0) {
