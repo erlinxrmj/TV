@@ -36,6 +36,7 @@ public class LoginActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        getWindow().setBackgroundDrawable(Ui.background());
         String editId = getIntent().getStringExtra("edit");
         if (editId != null) {
             for (Prefs.Profile p : Prefs.profiles()) if (p.id.equals(editId)) editing = p;
@@ -55,14 +56,13 @@ public class LoginActivity extends Activity {
 
     private FrameLayout backdrop() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF1E2033, 0xFF0B0C12, 0xFF1A0F24}));
+        root.setBackground(Ui.background());
         // Zwei weiche Farbflecken für Tiefe
         View glow1 = new View(this);
         GradientDrawable g1 = new GradientDrawable();
         g1.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         g1.setGradientRadius(Ui.dp(this, 420));
-        g1.setColors(new int[]{0x405AC8FA, 0x005AC8FA});
+        g1.setColors(new int[]{Ui.dark ? 0x26FFFFFF : 0x66FFFFFF, 0x00FFFFFF});
         glow1.setBackground(g1);
         root.addView(glow1, Ui.frame(Ui.dp(this, 840), Ui.dp(this, 840), Gravity.TOP | Gravity.START));
         glow1.setTranslationX(-Ui.dp(this, 300));
@@ -71,7 +71,7 @@ public class LoginActivity extends Activity {
         GradientDrawable g2 = new GradientDrawable();
         g2.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         g2.setGradientRadius(Ui.dp(this, 420));
-        g2.setColors(new int[]{0x38AF52DE, 0x00AF52DE});
+        g2.setColors(new int[]{Ui.dark ? 0x1AC8C8D0 : 0x40A0A0A8, 0x00C8C8D0});
         glow2.setBackground(g2);
         root.addView(glow2, Ui.frame(Ui.dp(this, 840), Ui.dp(this, 840), Gravity.BOTTOM | Gravity.END));
         glow2.setTranslationX(Ui.dp(this, 300));
@@ -117,12 +117,12 @@ public class LoginActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         int cp = Ui.dp(this, 32);
         card.setPadding(cp, cp, cp, cp);
-        card.setBackground(Ui.round(0x1AFFFFFF, Ui.dp(this, 28)));
+        card.setBackground(Ui.round(Ui.GLASS, Ui.dp(this, 28)));
 
         LinearLayout seg = new LinearLayout(this);
         seg.setOrientation(LinearLayout.HORIZONTAL);
         seg.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4));
-        seg.setBackground(Ui.round(0x14FFFFFF, Ui.dp(this, 100)));
+        seg.setBackground(Ui.round(Ui.ink(0x14), Ui.dp(this, 100)));
         tabX = Ui.pill(this, "Xtream Codes", 16);
         tabM = Ui.pill(this, "M3U-Playlist", 16);
         seg.addView(tabX, Ui.lin(0, Ui.WRAP, 1f));
@@ -202,7 +202,7 @@ public class LoginActivity extends Activity {
         box.addView(l, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), Ui.dp(this, 4), 0, 0, Ui.dp(this, 8)));
         EditText e = new EditText(this);
         e.setHint(hint);
-        e.setHintTextColor(0x40FFFFFF);
+        e.setHintTextColor(Ui.ink(0x55));
         e.setTextColor(Ui.TEXT);
         e.setTypeface(Ui.medium(this));
         e.setTextSize(17);
@@ -212,9 +212,9 @@ public class LoginActivity extends Activity {
         int p = Ui.dp(this, 16);
         e.setPadding(p, Ui.dp(this, 13), p, Ui.dp(this, 13));
         float r = Ui.dp(this, 14);
-        e.setBackground(Ui.round(0x14FFFFFF, r));
+        e.setBackground(Ui.round(Ui.ink(0x14), r));
         e.setOnFocusChangeListener((v, has) -> {
-            GradientDrawable g = Ui.round(has ? 0x2EFFFFFF : 0x14FFFFFF, r);
+            GradientDrawable g = Ui.round(has ? Ui.ink(0x24) : Ui.ink(0x14), r);
             if (has) g.setStroke(Ui.dp(this, 2), Ui.TEXT);
             v.setBackground(g);
         });
@@ -412,13 +412,13 @@ public class LoginActivity extends Activity {
         t.setOrientation(LinearLayout.VERTICAL);
         t.setGravity(Gravity.CENTER);
         t.setPadding(Ui.dp(this, 12), Ui.dp(this, 20), Ui.dp(this, 12), Ui.dp(this, 20));
-        t.setBackground(Ui.round(0x1AFFFFFF, Ui.dp(this, 24)));
+        t.setBackground(Ui.round(Ui.GLASS, Ui.dp(this, 24)));
         t.setClickable(true);
-        TextView circle = Ui.text(this, 34, 0xFFFFFFFF, Ui.bold(this));
+        TextView circle = Ui.text(this, 34, plus ? Ui.TEXT : 0xFF1D1D1F, Ui.bold(this));
         circle.setGravity(Gravity.CENTER);
         circle.setText(plus ? "+" : Names.initials(name).substring(0, Math.min(2, Names.initials(name).length())));
-        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                plus ? new int[]{0x33FFFFFF, 0x1AFFFFFF} : new int[]{Ui.ACCENT, Ui.ACCENT2});
+        GradientDrawable g = plus ? new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{Ui.ink(0x33), Ui.ink(0x1A)}) : Ui.silver(0);
         g.setShape(GradientDrawable.OVAL);
         circle.setBackground(g);
         t.addView(circle, Ui.lin(Ui.dp(this, 92), Ui.dp(this, 92)));
