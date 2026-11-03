@@ -15,7 +15,6 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
@@ -32,7 +31,7 @@ public class DetailActivity extends Activity {
     private LinearLayout buttons;
     private LinearLayout seasonRow;
     private HorizontalScrollView seasonScroll;
-    private RecyclerView episodes;
+    private TvList episodes;
     private ProgressBar busy;
     private List<Model.Episode> allEpisodes = new ArrayList<>();
     private List<Model.Episode> shownEpisodes = new ArrayList<>();
@@ -45,6 +44,7 @@ public class DetailActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        getWindow().setBackgroundDrawable(Ui.background());
         series = "series".equals(getIntent().getStringExtra("type"));
         String id = getIntent().getStringExtra("id");
         if (series) show = Library.get().series(id);
@@ -76,16 +76,16 @@ public class DetailActivity extends Activity {
     private void buildUi() {
         Context c = this;
         FrameLayout root = new FrameLayout(c);
-        root.setBackgroundColor(Ui.BG);
+        root.setBackground(Ui.background());
         bg = new ImageView(c);
         bg.setScaleType(ImageView.ScaleType.CENTER_CROP);
         bg.setAlpha(0f);
         root.addView(bg, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
         View shadeL = new View(c);
-        shadeL.setBackground(Ui.hgrad(0xF20B0C12, 0x330B0C12));
+        shadeL.setBackground(Ui.hgrad(Ui.scrim(0xF2), Ui.scrim(0x40)));
         root.addView(shadeL, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
         View shadeB = new View(c);
-        shadeB.setBackground(Ui.vgrad(0x000B0C12, 0xFF0B0C12));
+        shadeB.setBackground(Ui.vgrad(Ui.scrim(0x00), Ui.scrim(0xFF)));
         root.addView(shadeB, Ui.frame(Ui.MATCH, Ui.dp(c, 300), Gravity.BOTTOM));
 
         LinearLayout col = new LinearLayout(c);
@@ -98,7 +98,7 @@ public class DetailActivity extends Activity {
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setClipChildren(false);
         poster = new ImageView(c);
-        poster.setBackground(Ui.round(0xFF1C1E28, Ui.dp(c, 16)));
+        poster.setBackground(Ui.round(Ui.GLASS, Ui.dp(c, 16)));
         Ui.clipRound(poster, Ui.dp(c, 16));
         poster.setElevation(Ui.dp(c, 20));
         top.addView(poster, series ? Ui.lin(Ui.dp(c, 120), Ui.dp(c, 180)) : Ui.lin(Ui.dp(c, 168), Ui.dp(c, 252)));
@@ -136,12 +136,8 @@ public class DetailActivity extends Activity {
             seasonRow.setClipChildren(false);
             seasonScroll.addView(seasonRow);
             col.addView(seasonScroll, Ui.margins(Ui.lin(Ui.MATCH, Ui.WRAP), 0, Ui.dp(c, 10), 0, 0));
-            episodes = new RecyclerView(c);
-            episodes.setLayoutManager(new LinearLayoutManager(c, LinearLayoutManager.HORIZONTAL, false));
-            episodes.setClipToPadding(false);
-            episodes.setClipChildren(false);
-            episodes.setPadding(Ui.dp(c, 4), Ui.dp(c, 12), Ui.dp(c, 60), Ui.dp(c, 12));
-            episodes.setItemAnimator(null);
+            episodes = new TvList(c, true, 0f);
+            episodes.setPadding(Ui.dp(c, 8), Ui.dp(c, 12), Ui.dp(c, 60), Ui.dp(c, 12));
             epAdapter = new EpAdapter();
             episodes.setAdapter(epAdapter);
             col.addView(episodes, Ui.lin(Ui.MATCH, Ui.WRAP));
@@ -394,7 +390,7 @@ public class DetailActivity extends Activity {
             FrameLayout card = new FrameLayout(c);
             float r = Ui.dp(c, 14);
             card.setBackground(new android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR, new int[]{0xFF262A3A, 0xFF15161E}));
+                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR, new int[]{Ui.dark ? 0xFF2A2B31 : 0xFF4A4A4F, Ui.dark ? 0xFF16171B : 0xFF2C2C30}));
             Ui.clipRound(card, r);
             TextView num = Ui.text(c, 30, 0x33FFFFFF, Ui.bold(c));
             card.addView(num, Ui.frame(Ui.WRAP, Ui.WRAP, Gravity.CENTER));
@@ -413,7 +409,7 @@ public class DetailActivity extends Activity {
             lp.setMargins(0, 0, Ui.dp(c, 20), 0);
             v.setLayoutParams(lp);
             VH vh = new VH(v, card, img, num, name, info, bar);
-            android.graphics.drawable.Drawable ringD = Ui.ring(0xF2FFFFFF, Ui.dp(c, 3), r);
+            android.graphics.drawable.Drawable ringD = Ui.ring(Ui.RING, Ui.dp(c, 3), r);
             v.setOnFocusChangeListener((view, has) -> {
                 card.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f)
                         .translationZ(has ? Ui.dp(c, 14) : 0).setDuration(160).start();
