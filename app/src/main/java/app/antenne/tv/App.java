@@ -16,6 +16,7 @@ public class App extends Application {
         super.onCreate();
         instance = this;
         Prefs.init(this);
+        Ui.apply(Prefs.darkMode());
         Store.init(this);
     }
 }
