@@ -19,19 +19,90 @@ import android.widget.TextView;
 /** Farben, Schriften und Bausteine im Apple-TV-Stil: dunkles Glas, weiche Schatten, Fokus hebt an. */
 public final class Ui {
 
-    public static final int BG = 0xFF0B0C12;
-    public static final int GLASS = 0x1FFFFFFF;
-    public static final int GLASS_HI = 0x33FFFFFF;
-    public static final int GLASS_LO = 0x12FFFFFF;
-    public static final int TEXT = 0xFFFFFFFF;
-    public static final int TEXT2 = 0xA6FFFFFF;
-    public static final int TEXT3 = 0x66FFFFFF;
-    public static final int ACCENT = 0xFF5AC8FA;
-    public static final int ACCENT2 = 0xFFAF52DE;
+    // ---------- Farben (je nach Modus Dunkel / Hell, Hauptfarbe Silber) ----------
+    public static boolean dark = true;
+    public static int BG, BG_TOP;          // Hintergrund (Verlauf oben → unten)
+    public static int INK;                 // Grundfarbe für Text/Linien
+    public static int TEXT, TEXT2, TEXT3;
+    public static int GLASS, GLASS_HI, GLASS_LO; // Glasflächen (Karten, Pillen)
+    public static int TILE;                // Hintergrund der Logo-Kacheln
+    public static int FOCUS_BG, FOCUS_FG;  // fokussiertes Element
+    public static int RING;                // Fokusrand um Karten
+    public static int ACCENT, ACCENT2;     // Silber
+    public static int SCRIM;               // Abdunkeln über Bildern (Basisfarbe)
     public static final int FAV = 0xFFFFD60A;
     public static final int LIVE = 0xFFFF453A;
     public static final int OK = 0xFF30D158;
     public static final int WARN = 0xFFFF9F0A;
+
+    static {
+        apply(true);
+    }
+
+    /** Setzt alle Farben für den gewählten Modus. */
+    public static void apply(boolean darkMode) {
+        dark = darkMode;
+        if (darkMode) {
+            BG = 0xFF0E0F12;
+            BG_TOP = 0xFF1E1F24;
+            INK = 0xFFF5F5F7;
+            GLASS = 0x1FFFFFFF;
+            GLASS_HI = 0x33FFFFFF;
+            GLASS_LO = 0x12FFFFFF;
+            TILE = 0x1FFFFFFF;
+            FOCUS_BG = 0xFFF2F2F5;
+            FOCUS_FG = 0xFF111114;
+            RING = 0xF2FFFFFF;
+            ACCENT = 0xFFD8D8DE;
+            ACCENT2 = 0xFF9A9AA2;
+            SCRIM = 0xFF0E0F12;
+        } else {
+            BG = 0xFFE6E7EB;
+            BG_TOP = 0xFFF8F8FA;
+            INK = 0xFF1D1D1F;
+            GLASS = 0xB3FFFFFF;
+            GLASS_HI = 0xFFFFFFFF;
+            GLASS_LO = 0x80FFFFFF;
+            TILE = 0xFF3A3A3D;
+            FOCUS_BG = 0xFF1D1D1F;
+            FOCUS_FG = 0xFFFFFFFF;
+            RING = 0xFF1D1D1F;
+            ACCENT = 0xFF6E6E76;
+            ACCENT2 = 0xFFB4B4BC;
+            SCRIM = 0xFFE6E7EB;
+        }
+        TEXT = INK;
+        TEXT2 = ink(0xA6);
+        TEXT3 = ink(darkMode ? 0x66 : 0x80);
+    }
+
+    /** Textfarbe mit Deckkraft (0–255). */
+    public static int ink(int alpha) {
+        return (alpha << 24) | (INK & 0x00FFFFFF);
+    }
+
+    /** Schriftfarbe auf fokussierten Flächen mit Deckkraft. */
+    public static int focusInk(int alpha) {
+        return (alpha << 24) | (FOCUS_FG & 0x00FFFFFF);
+    }
+
+    /** Hintergrundfarbe mit Deckkraft (für Verläufe über Bildern). */
+    public static int scrim(int alpha) {
+        return (alpha << 24) | (SCRIM & 0x00FFFFFF);
+    }
+
+    /** Hintergrund eines Bildschirms (ruhiger Verlauf). */
+    public static android.graphics.drawable.Drawable background() {
+        return new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{BG_TOP, BG, BG});
+    }
+
+    /** Silberner Verlauf (Profilkreise, Akzente). */
+    public static GradientDrawable silver(float radius) {
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFFF4F4F7, 0xFFC9C9CF, 0xFF9C9CA4});
+        g.setCornerRadius(radius);
+        return g;
+    }
 
     private static Typeface regular, medium, semibold, bold;
 
@@ -156,7 +227,7 @@ public final class Ui {
      */
     public static void lift(View v, float scale, float radiusPx, FocusExtra extra) {
         v.setFocusable(true);
-        Drawable ringD = ring(0xE6FFFFFF, dp(v.getContext(), 2.5f), radiusPx);
+        Drawable ringD = ring(RING, dp(v.getContext(), 2.5f), radiusPx);
         v.setOnFocusChangeListener((view, has) -> {
             view.animate().scaleX(has ? scale : 1f).scaleY(has ? scale : 1f)
                     .translationZ(has ? dp(view.getContext(), 14) : 0f)
@@ -185,6 +256,18 @@ public final class Ui {
         return t;
     }
 
+    /** Runde Pille nur mit Symbol (Suche, Einstellungen) – wie in der tvOS-Leiste. */
+    public static TextView iconPill(Context c, int drawableRes) {
+        TextView t = pill(c, "", 15);
+        android.graphics.drawable.Drawable d = c.getResources().getDrawable(drawableRes, c.getTheme()).mutate();
+        int s = dp(c, 20);
+        d.setBounds(0, 0, s, s);
+        t.setCompoundDrawables(d, null, null, null);
+        t.setPadding(dp(c, 11), dp(c, 8), dp(c, 11), dp(c, 8));
+        stylePill(t, false, false);
+        return t;
+    }
+
     public static void setPillSelected(TextView t, boolean selected) {
         t.setTag(R.id.tag_selected, selected);
         stylePill(t, t.hasFocus(), selected);
@@ -193,24 +276,27 @@ public final class Ui {
     private static void stylePill(TextView t, boolean focused, boolean selected) {
         Context c = t.getContext();
         float r = dp(c, 100);
+        int fg;
         if (focused) {
-            t.setBackground(round(Color.WHITE, r));
-            t.setTextColor(0xFF111111);
-            t.animate().scaleX(1.08f).scaleY(1.08f).translationZ(dp(c, 8)).setDuration(140).start();
+            t.setBackground(round(FOCUS_BG, r));
+            fg = FOCUS_FG;
+            t.animate().scaleX(1.06f).scaleY(1.06f).setDuration(140).start();
         } else if (selected) {
             t.setBackground(round(GLASS_HI, r));
-            t.setTextColor(TEXT);
-            t.animate().scaleX(1f).scaleY(1f).translationZ(0).setDuration(140).start();
+            fg = TEXT;
+            t.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
         } else {
             t.setBackground(null);
-            t.setTextColor(TEXT2);
-            t.animate().scaleX(1f).scaleY(1f).translationZ(0).setDuration(140).start();
+            fg = TEXT2;
+            t.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
         }
+        t.setTextColor(fg);
+        t.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(fg));
     }
 
     /** Großer Aktionsknopf (Abspielen usw.). */
     public static TextView button(Context c, String label, boolean primary) {
-        TextView t = text(c, 17, primary ? 0xFF111111 : TEXT, semibold(c));
+        TextView t = text(c, 17, TEXT, semibold(c));
         t.setText(label);
         t.setGravity(Gravity.CENTER);
         t.setPadding(dp(c, 28), dp(c, 13), dp(c, 28), dp(c, 13));
@@ -225,13 +311,13 @@ public final class Ui {
 
     private static void styleButton(TextView t, boolean focused, boolean primary, float r) {
         if (focused) {
-            t.setBackground(round(Color.WHITE, r));
-            t.setTextColor(0xFF111111);
-            t.animate().scaleX(1.07f).scaleY(1.07f).translationZ(dp(t.getContext(), 10)).setDuration(140).start();
+            t.setBackground(round(FOCUS_BG, r));
+            t.setTextColor(FOCUS_FG);
+            t.animate().scaleX(1.06f).scaleY(1.06f).setDuration(140).start();
         } else {
-            t.setBackground(round(primary ? 0xE6FFFFFF : GLASS_HI, r));
-            t.setTextColor(primary ? 0xFF111111 : TEXT);
-            t.animate().scaleX(1f).scaleY(1f).translationZ(0).setDuration(140).start();
+            t.setBackground(round(primary ? ink(0x30) : GLASS, r));
+            t.setTextColor(TEXT);
+            t.animate().scaleX(1f).scaleY(1f).setDuration(140).start();
         }
     }
 
@@ -293,7 +379,7 @@ public final class Ui {
         TextView t = text(c, 17, TEXT, semibold(c));
         t.setText(msg);
         t.setPadding(dp(c, 24), dp(c, 14), dp(c, 24), dp(c, 14));
-        t.setBackground(round(0xF02A2C38, dp(c, 100)));
+        t.setBackground(round(dark ? 0xF02C2C30 : 0xF2FFFFFF, dp(c, 100)));
         t.setElevation(dp(c, 20));
         FrameLayout.LayoutParams lp = frame(WRAP, WRAP, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         lp.bottomMargin = dp(c, 48);
@@ -302,6 +388,83 @@ public final class Ui {
         root.addView(t, lp);
         t.animate().alpha(1f).translationY(0).setDuration(200).start();
         t.postDelayed(() -> t.animate().alpha(0f).setDuration(250).withEndAction(() -> root.removeView(t)).start(), 2200);
+    }
+
+    public interface Choice {
+        void onChoice(int index);
+    }
+
+    /**
+     * Auswahlfenster im App-Stil (statt grauem Android-Dialog): Titel, Optionen, Häkchen bei der
+     * aktuellen Wahl. Bedienung nur mit Pfeiltasten und OK.
+     */
+    public static android.app.Dialog choose(android.app.Activity a, String title, String subtitle,
+                                            String[] options, int selected, Choice cb) {
+        android.app.Dialog d = new android.app.Dialog(a, android.R.style.Theme_Translucent_NoTitleBar);
+        Context c = a;
+        FrameLayout root = new FrameLayout(c);
+        root.setBackgroundColor(dark ? 0x99000000 : 0x66000000);
+        LinearLayout card = new LinearLayout(c);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int p = dp(c, 24);
+        card.setPadding(p, p, p, dp(c, 18));
+        card.setBackground(round(dark ? 0xFA232327 : 0xFAF7F7F9, dp(c, 26)));
+        card.setElevation(dp(c, 24));
+        TextView t = text(c, 22, TEXT, bold(c));
+        t.setText(title);
+        card.addView(t);
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView st = text(c, 14, TEXT2, regular(c));
+            st.setText(subtitle);
+            st.setLineSpacing(dp(c, 3), 1f);
+            card.addView(st, margins(lin(MATCH, WRAP), 0, dp(c, 8), 0, 0));
+        }
+        android.widget.ScrollView sv = new android.widget.ScrollView(c);
+        sv.setVerticalScrollBarEnabled(false);
+        LinearLayout list = new LinearLayout(c);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(0, dp(c, 14), 0, dp(c, 4));
+        View first = null;
+        for (int i = 0; i < options.length; i++) {
+            final int idx = i;
+            LinearLayout row = new LinearLayout(c);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(c, 16), dp(c, 12), dp(c, 16), dp(c, 12));
+            row.setFocusable(true);
+            row.setClickable(true);
+            TextView check = text(c, 16, TEXT, bold(c));
+            check.setText(i == selected ? "✓" : "");
+            row.addView(check, lin(dp(c, 26), WRAP));
+            TextView l = lines(text(c, 17, TEXT, semibold(c)), 2);
+            l.setText(options[i]);
+            row.addView(l, lin(0, WRAP, 1f));
+            float r = dp(c, 14);
+            row.setOnFocusChangeListener((v, has) -> {
+                v.setBackground(has ? round(FOCUS_BG, r) : null);
+                l.setTextColor(has ? FOCUS_FG : TEXT);
+                check.setTextColor(has ? FOCUS_FG : TEXT);
+            });
+            row.setOnClickListener(v -> {
+                d.dismiss();
+                cb.onChoice(idx);
+            });
+            list.addView(row, margins(lin(MATCH, WRAP), 0, 0, 0, dp(c, 4)));
+            if (first == null || i == selected) first = row;
+        }
+        sv.addView(list);
+        card.addView(sv, lin(MATCH, WRAP));
+        FrameLayout.LayoutParams lp = frame(dp(c, 460), WRAP, Gravity.CENTER);
+        lp.topMargin = dp(c, 30);
+        lp.bottomMargin = dp(c, 30);
+        root.addView(card, lp);
+        d.setContentView(root);
+        View f = first;
+        d.setOnShowListener(x -> {
+            if (f != null) f.requestFocus();
+        });
+        d.show();
+        return d;
     }
 
     public static String time(long ms) {

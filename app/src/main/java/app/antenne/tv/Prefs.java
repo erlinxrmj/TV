@@ -166,6 +166,57 @@ public final class Prefs {
         sp.edit().putString("ua", ua).apply();
     }
 
+    // ---------- Darstellung & Player ----------
+
+    public static boolean darkMode() {
+        return sp.getBoolean("dark", true);
+    }
+
+    public static void setDarkMode(boolean b) {
+        sp.edit().putBoolean("dark", b).apply();
+    }
+
+    /** Puffer: 0 = Klein (schneller Start), 1 = Normal, 2 = Gross, 3 = Sehr gross (stabil). */
+    public static int buffer() {
+        return sp.getInt("buffer", 1);
+    }
+
+    public static void setBuffer(int b) {
+        sp.edit().putInt("buffer", b).apply();
+    }
+
+    public static final String[] BUFFER_NAMES = {"Klein · schneller Start", "Normal", "Gross · stabiler", "Sehr gross · für schwache Streams"};
+
+    /** Player: "exo" (Standard), "exo_sw" (Kompatibel), "vlc" (VLC-Engine), "ext" (andere App). */
+    public static String engine() {
+        return sp.getString("engine", "exo");
+    }
+
+    public static void setEngine(String e) {
+        sp.edit().putString("engine", e).apply();
+    }
+
+    public static final String[] ENGINE_IDS = {"exo", "exo_sw", "vlc", "ext"};
+    public static final String[] ENGINE_NAMES = {"Standard", "Kompatibel (Software)", "VLC-Engine", "Externe App"};
+
+    public static String engineName(String id) {
+        for (int i = 0; i < ENGINE_IDS.length; i++) if (ENGINE_IDS[i].equals(id)) return ENGINE_NAMES[i];
+        return ENGINE_NAMES[0];
+    }
+
+    /** Höchste Qualität: 0 = Automatisch, sonst maximale Bildhöhe (2160, 1080, 720, 480). */
+    public static int maxQuality() {
+        return sp.getInt("max_q", 0);
+    }
+
+    public static void setMaxQuality(int h) {
+        sp.edit().putInt("max_q", h).apply();
+    }
+
+    public static String qualityName(int h) {
+        return h <= 0 ? "Automatisch" : h >= 2160 ? "Bis 4K" : "Bis " + h + "p";
+    }
+
     public static String lastTab() {
         return sp.getString("last_tab", "live");
     }
