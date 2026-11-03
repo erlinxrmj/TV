@@ -26,7 +26,7 @@ import java.util.Locale;
 public class SearchScreen extends Screen implements Posters.Callbacks {
 
     private EditText field;
-    private RecyclerView rows;
+    private TvList rows;
     private Posters.RowsAdapter adapter;
     private TextView hint;
     private int searchGen;
@@ -41,13 +41,11 @@ public class SearchScreen extends Screen implements Posters.Callbacks {
         Context c = a;
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(Ui.dp(c, 44), Ui.dp(c, 92), 0, 0);
-        col.setClipChildren(false);
-        col.setClipToPadding(false);
+        col.setPadding(Ui.dp(c, 44), Ui.dp(c, 84), 0, 0);
 
         field = new EditText(c);
         field.setHint("Sender, Filme oder Serien suchen");
-        field.setHintTextColor(0x59FFFFFF);
+        field.setHintTextColor(Ui.TEXT3);
         field.setTextColor(Ui.TEXT);
         field.setTypeface(Ui.semibold(c));
         field.setTextSize(22);
@@ -56,9 +54,9 @@ public class SearchScreen extends Screen implements Posters.Callbacks {
         field.setImeOptions(EditorInfo.IME_ACTION_SEARCH | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
         field.setPadding(Ui.dp(c, 24), Ui.dp(c, 14), Ui.dp(c, 24), Ui.dp(c, 14));
         float r = Ui.dp(c, 100);
-        field.setBackground(Ui.round(0x1FFFFFFF, r));
+        field.setBackground(Ui.round(Ui.GLASS, r));
         field.setOnFocusChangeListener((v, has) -> {
-            GradientDrawable g = Ui.round(has ? 0x33FFFFFF : 0x1FFFFFFF, r);
+            GradientDrawable g = Ui.round(has ? Ui.GLASS_HI : Ui.GLASS, r);
             if (has) g.setStroke(Ui.dp(c, 2), Ui.TEXT);
             v.setBackground(g);
         });
@@ -95,11 +93,7 @@ public class SearchScreen extends Screen implements Posters.Callbacks {
         col.addView(field, Ui.margins(Ui.lin(Ui.dp(c, 620), Ui.WRAP), 0, 0, 0, Ui.dp(c, 18)));
 
         FrameLayout box = new FrameLayout(c);
-        box.setClipChildren(false);
-        rows = new RecyclerView(c);
-        rows.setLayoutManager(new Posters.CalmLayoutManager(c));
-        rows.setClipToPadding(false);
-        rows.setClipChildren(false);
+        rows = new TvList(c, false, 0f);
         rows.setPadding(0, 0, 0, Ui.dp(c, 300));
         rows.setItemAnimator(null);
         adapter = new Posters.RowsAdapter(this);

@@ -16,12 +16,16 @@ import java.util.List;
 public class MediaScreen extends Screen implements Posters.Callbacks {
 
     private final boolean seriesMode;
-    private RecyclerView rows;
+    private TvList rows;
     private Posters.RowsAdapter adapter;
     private TextView hTitle, hMeta, hPlot, loading;
     private boolean built;
     private Object lastFocus;
     private String resumeSig = "";
+    private Object pendingHero;
+    private final Runnable heroRunnable = () -> {
+        if (pendingHero != null) showHero(pendingHero);
+    };
 
     public MediaScreen(MainActivity a, boolean series) {
         super(a);
@@ -33,13 +37,11 @@ public class MediaScreen extends Screen implements Posters.Callbacks {
         Context c = a;
         LinearLayout col = new LinearLayout(c);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(Ui.dp(c, 44), Ui.dp(c, 92), 0, 0);
-        col.setClipChildren(false);
-        col.setClipToPadding(false);
+        col.setPadding(Ui.dp(c, 44), Ui.dp(c, 84), 0, 0);
 
         LinearLayout hero = new LinearLayout(c);
         hero.setOrientation(LinearLayout.VERTICAL);
-        hTitle = Ui.lines(Ui.text(c, 34, Ui.TEXT, Ui.bold(c)), 1);
+        hTitle = Ui.lines(Ui.text(c, 30, Ui.TEXT, Ui.bold(c)), 1);
         hTitle.setLetterSpacing(-0.01f);
         hero.addView(hTitle, Ui.lin(Ui.dp(c, 700), Ui.WRAP));
         hMeta = Ui.lines(Ui.text(c, 15, Ui.TEXT2, Ui.semibold(c)), 1);
@@ -47,14 +49,10 @@ public class MediaScreen extends Screen implements Posters.Callbacks {
         hPlot = Ui.lines(Ui.text(c, 15, Ui.TEXT2, Ui.regular(c)), 2);
         hPlot.setLineSpacing(Ui.dp(c, 3), 1f);
         hero.addView(hPlot, Ui.margins(Ui.lin(Ui.dp(c, 620), Ui.WRAP), 0, Ui.dp(c, 8), 0, 0));
-        col.addView(hero, Ui.lin(Ui.MATCH, Ui.dp(c, 112)));
+        col.addView(hero, Ui.lin(Ui.MATCH, Ui.dp(c, 120)));
 
         FrameLayout box = new FrameLayout(c);
-        box.setClipChildren(false);
-        rows = new RecyclerView(c);
-        rows.setLayoutManager(new Posters.CalmLayoutManager(c));
-        rows.setClipToPadding(false);
-        rows.setClipChildren(false);
+        rows = new TvList(c, false, 0f);
         rows.setPadding(0, Ui.dp(c, 4), 0, Ui.dp(c, 320));
         rows.setItemAnimator(null);
         rows.setItemViewCacheSize(4);
@@ -171,7 +169,10 @@ public class MediaScreen extends Screen implements Posters.Callbacks {
     @Override
     public void onFocus(Object item, View card) {
         lastFocus = item;
-        showHero(item);
+        // Kurz warten: beim schnellen Durchscrollen nicht jedes Bild laden (ruckelfrei)
+        pendingHero = item;
+        Bg.cancel(heroRunnable);
+        Bg.later(heroRunnable, 140);
     }
 
     @Override

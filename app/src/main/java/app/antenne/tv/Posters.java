@@ -10,7 +10,6 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
@@ -100,7 +99,7 @@ public final class Posters {
             v.setClipToPadding(false);
             FrameLayout card = new FrameLayout(c);
             float rad = Ui.dp(c, 14);
-            card.setBackground(Ui.round(channel ? Ui.GLASS : 0xFF1C1E28, rad));
+            card.setBackground(Ui.round(channel ? Ui.TILE : Ui.GLASS, rad));
             Ui.clipRound(card, rad);
             TextView fb = Ui.text(c, 15, Ui.TEXT2, Ui.semibold(c));
             fb.setGravity(Gravity.CENTER);
@@ -111,7 +110,7 @@ public final class Posters {
             FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH);
             if (channel) ilp.setMargins(Ui.dp(c, 18), Ui.dp(c, 14), Ui.dp(c, 18), Ui.dp(c, 14));
             card.addView(img, ilp);
-            TextView badge = Ui.badge(c, "", 0xCC000000, 0xFFFFFFFF);
+            TextView badge = Ui.badge(c, "", 0xB3000000, 0xFFFFFFFF);
             badge.setTextSize(11);
             FrameLayout.LayoutParams blp = Ui.frame(Ui.WRAP, Ui.WRAP, Gravity.TOP | Gravity.END);
             blp.setMargins(0, Ui.dp(c, 6), Ui.dp(c, 6), 0);
@@ -124,17 +123,17 @@ public final class Posters {
             TextView label = Ui.lines(Ui.text(c, 13, Ui.TEXT2, Ui.medium(c)), 1);
             v.addView(label, Ui.margins(Ui.lin(w, Ui.WRAP), Ui.dp(c, 2), Ui.dp(c, 9), 0, 0));
             RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(Ui.WRAP, Ui.WRAP);
-            lp.setMargins(0, 0, Ui.dp(c, 18), 0);
+            lp.setMargins(0, 0, Ui.dp(c, 20), 0);
             v.setLayoutParams(lp);
             v.setFocusable(true);
             v.setClickable(true);
             VH vh = new VH(v, card, img, fb, label, badge, bar);
             float r = rad;
-            android.graphics.drawable.Drawable ringD = Ui.ring(0xF2FFFFFF, Ui.dp(c, 3), r);
+            android.graphics.drawable.Drawable ringD = Ui.ring(Ui.RING, Ui.dp(c, 3), r);
             v.setOnFocusChangeListener((view, has) -> {
-                card.animate().scaleX(has ? 1.1f : 1f).scaleY(has ? 1.1f : 1f)
-                        .translationZ(has ? Ui.dp(c, 16) : 0).setDuration(170).start();
-                label.animate().translationY(has ? Ui.dp(c, 10) : 0).setDuration(170).start();
+                card.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f)
+                        .translationZ(has ? Ui.dp(c, 12) : 0).setDuration(150).start();
+                label.animate().translationY(has ? Ui.dp(c, 9) : 0).setDuration(150).start();
                 label.setTextColor(has ? Ui.TEXT : Ui.TEXT2);
                 if (android.os.Build.VERSION.SDK_INT >= 23) card.setForeground(has ? ringD : null);
                 if (has && cb != null && vh.item != null) cb.onFocus(vh.item, view);
@@ -216,9 +215,9 @@ public final class Posters {
 
         static final class VH extends RecyclerView.ViewHolder {
             final TextView title;
-            final RecyclerView list;
+            final TvList list;
 
-            VH(LinearLayout v, TextView title, RecyclerView list) {
+            VH(LinearLayout v, TextView title, TvList list) {
                 super(v);
                 this.title = title;
                 this.list = list;
@@ -235,13 +234,8 @@ public final class Posters {
             v.setClipToPadding(false);
             TextView title = Ui.lines(Ui.text(c, 19, Ui.TEXT, Ui.bold(c)), 1);
             v.addView(title, Ui.margins(Ui.lin(Ui.MATCH, Ui.WRAP), Ui.dp(c, 4), 0, 0, Ui.dp(c, 10)));
-            RecyclerView list = new RecyclerView(c);
-            list.setLayoutManager(new LinearLayoutManager(c, LinearLayoutManager.HORIZONTAL, false));
-            list.setClipToPadding(false);
-            list.setClipChildren(false);
-            list.setPadding(Ui.dp(c, 6), Ui.dp(c, 14), Ui.dp(c, 60), Ui.dp(c, 14));
-            list.setItemAnimator(null);
-            list.setHasFixedSize(true);
+            TvList list = new TvList(c, true, 0f);
+            list.setPadding(Ui.dp(c, 10), Ui.dp(c, 14), Ui.dp(c, 60), Ui.dp(c, 16));
             v.addView(list, Ui.lin(Ui.MATCH, Ui.WRAP));
             RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(Ui.MATCH, Ui.WRAP);
             lp.bottomMargin = Ui.dp(c, 10);
@@ -250,12 +244,6 @@ public final class Posters {
             Callbacks wrapped = new Callbacks() {
                 @Override
                 public void onFocus(Object item, View card) {
-                    // Fokussierte Reihe nach oben holen
-                    if (outer != null) {
-                        int target = Ui.dp(c, 6);
-                        int dy = vh.itemView.getTop() - target;
-                        if (dy != 0) outer.smoothScrollBy(0, dy);
-                    }
                     if (cb != null) cb.onFocus(item, card);
                 }
 
@@ -281,16 +269,4 @@ public final class Posters {
         }
     }
 
-    /** LayoutManager, der selbst nicht springt – das Scrollen übernimmt {@link RowsAdapter}. */
-    public static final class CalmLayoutManager extends LinearLayoutManager {
-        public CalmLayoutManager(Context c) {
-            super(c);
-        }
-
-        @Override
-        public boolean requestChildRectangleOnScreen(@NonNull RecyclerView parent, @NonNull View child,
-                                                     @NonNull android.graphics.Rect rect, boolean immediate, boolean focusedChildVisible) {
-            return false;
-        }
-    }
 }

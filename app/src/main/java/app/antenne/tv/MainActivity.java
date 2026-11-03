@@ -48,6 +48,7 @@ public class MainActivity extends Activity implements Library.Listener {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        getWindow().setBackgroundDrawable(Ui.background());
         if (Library.get().profile == null) {
             startActivity(new Intent(this, StartActivity.class));
             finish();
@@ -57,6 +58,8 @@ public class MainActivity extends Activity implements Library.Listener {
         Library.get().addListener(this);
         String start = Prefs.lastTab();
         if (!screens.containsKey(start) || "search".equals(start) || "settings".equals(start)) start = "live";
+        String req = getIntent().getStringExtra("tab");
+        if (req != null && screens.containsKey(req)) start = req;
         show(start);
         TextView t = tabs.get(start);
         if (t != null) t.post(() -> {
@@ -92,7 +95,7 @@ public class MainActivity extends Activity implements Library.Listener {
 
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Ui.BG);
+        root.setBackground(Ui.background());
 
         backdrop = new ImageView(this);
         backdrop.setAlpha(0f);
@@ -100,7 +103,7 @@ public class MainActivity extends Activity implements Library.Listener {
         backdropShade = new View(this);
         backdropShade.setBackground(new android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0x99000000, 0xB30B0C12, 0xF20B0C12}));
+                new int[]{Ui.scrim(0x99), Ui.scrim(0xC7), Ui.scrim(0xF5)}));
         root.addView(backdropShade, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
 
         content = new FrameLayout(this);
@@ -108,46 +111,54 @@ public class MainActivity extends Activity implements Library.Listener {
 
         // Verlauf hinter der Navigation, damit sie über Bildern lesbar bleibt
         View topShade = new View(this);
-        topShade.setBackground(Ui.vgrad(0xCC0B0C12, 0x000B0C12));
-        root.addView(topShade, Ui.frame(Ui.MATCH, Ui.dp(this, 110), Gravity.TOP));
+        topShade.setBackground(Ui.vgrad(Ui.scrim(0xF0), Ui.scrim(0x00)));
+        root.addView(topShade, Ui.frame(Ui.MATCH, Ui.dp(this, 84), Gravity.TOP));
 
-        FrameLayout bar = new FrameLayout(this);
-        int side = Ui.dp(this, 48);
-        bar.setPadding(side, Ui.dp(this, 22), side, 0);
+        // Obere Leiste: links Logo, Mitte Glas-Kapsel, rechts Uhr. Feste Seitenbreiten,
+        // damit sich nichts überlappen kann und die Kapsel genau mittig sitzt.
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.TOP);
+        int side = Ui.dp(this, 40);
+        bar.setPadding(side, Ui.dp(this, 20), side, 0);
+        int sideW = Ui.dp(this, 150);
 
-        // Links: Logo
+        FrameLayout left = new FrameLayout(this);
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.mipmap.ic_launcher);
-        FrameLayout.LayoutParams llp = Ui.frame(Ui.dp(this, 38), Ui.dp(this, 38), Gravity.START | Gravity.TOP);
-        llp.topMargin = Ui.dp(this, 3);
-        bar.addView(logo, llp);
+        FrameLayout.LayoutParams llp = Ui.frame(Ui.dp(this, 36), Ui.dp(this, 36), Gravity.START | Gravity.TOP);
+        llp.topMargin = Ui.dp(this, 2);
+        left.addView(logo, llp);
+        bar.addView(left, Ui.lin(sideW, Ui.WRAP));
 
-        // Mitte: Glas-Kapsel mit Bereichen
+        FrameLayout mid = new FrameLayout(this);
+        mid.setClipChildren(false);
         nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER_VERTICAL);
-        nav.setPadding(Ui.dp(this, 6), Ui.dp(this, 5), Ui.dp(this, 6), Ui.dp(this, 5));
-        nav.setBackground(Ui.round(0x26FFFFFF, Ui.dp(this, 100)));
+        nav.setPadding(Ui.dp(this, 5), Ui.dp(this, 4), Ui.dp(this, 5), Ui.dp(this, 4));
+        nav.setBackground(Ui.round(Ui.dark ? 0x21FFFFFF : 0xCCFFFFFF, Ui.dp(this, 100)));
         nav.setClipChildren(false);
         nav.setClipToPadding(false);
-        addTab("live", "Live-TV", new LiveScreen(this));
-        addTab("guide", "TV-Programm", new GuideScreen(this));
-        addTab("movies", "Filme", new MediaScreen(this, false));
-        addTab("series", "Serien", new MediaScreen(this, true));
-        addTab("search", "Suche", new SearchScreen(this));
-        addTab("settings", "Einstellungen", new SettingsScreen(this));
-        bar.addView(nav, Ui.frame(Ui.WRAP, Ui.WRAP, Gravity.CENTER_HORIZONTAL | Gravity.TOP));
+        addTab("live", "Live-TV", 0, new LiveScreen(this));
+        addTab("guide", "TV-Programm", 0, new GuideScreen(this));
+        addTab("movies", "Filme", 0, new MediaScreen(this, false));
+        addTab("series", "Serien", 0, new MediaScreen(this, true));
+        addTab("search", null, R.drawable.ic_search, new SearchScreen(this));
+        addTab("settings", null, R.drawable.ic_settings, new SettingsScreen(this));
+        mid.addView(nav, Ui.frame(Ui.WRAP, Ui.WRAP, Gravity.CENTER_HORIZONTAL | Gravity.TOP));
+        bar.addView(mid, Ui.lin(0, Ui.WRAP, 1f));
 
-        // Rechts: Uhr, darunter Abo-Laufzeit
         LinearLayout right = new LinearLayout(this);
         right.setOrientation(LinearLayout.VERTICAL);
         right.setGravity(Gravity.END);
-        clock = Ui.text(this, 24, Ui.TEXT, Ui.semibold(this));
+        clock = Ui.text(this, 22, Ui.TEXT, Ui.semibold(this));
+        clock.setSingleLine(true);
         right.addView(clock);
-        abo = Ui.text(this, 12, Ui.TEXT2, Ui.semibold(this));
+        abo = Ui.lines(Ui.text(this, 12, Ui.TEXT2, Ui.semibold(this)), 1);
         abo.setVisibility(View.GONE);
-        right.addView(abo, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), 0, Ui.dp(this, 5), 0, 0));
-        bar.addView(right, Ui.frame(Ui.WRAP, Ui.WRAP, Gravity.END | Gravity.TOP));
+        right.addView(abo, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), 0, Ui.dp(this, 4), 0, 0));
+        bar.addView(right, Ui.lin(sideW, Ui.WRAP));
 
         root.addView(bar, Ui.frame(Ui.MATCH, Ui.WRAP, Gravity.TOP));
         root.setClipChildren(false);
@@ -157,8 +168,8 @@ public class MainActivity extends Activity implements Library.Listener {
         updateAbo();
     }
 
-    private void addTab(String id, String label, Screen s) {
-        TextView t = Ui.pill(this, label, 15);
+    private void addTab(String id, String label, int icon, Screen s) {
+        TextView t = icon != 0 ? Ui.iconPill(this, icon) : Ui.pill(this, label, 15);
         View.OnFocusChangeListener base = t.getOnFocusChangeListener();
         t.setOnFocusChangeListener((v, has) -> {
             base.onFocusChange(v, has);
