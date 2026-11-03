@@ -1,0 +1,18 @@
+36:Unable to strip the following libraries, packaging them as they are: libc++_shared.so, libvlc.so, libvlcjni.so.
+64:/home/runner/work/TV/TV/app/src/main/java/app/antenne/tv/PlayerActivity.java:313: error: method create in class Players cannot be applied to given types;
+70:Note: Some input files use or override a deprecated API.
+71:Note: Recompile with -Xlint:deprecation for details.
+74:> Task :app:compileReleaseJavaWithJavac FAILED
+80:* What went wrong:
+83:  Note: Recompile with -Xlint:deprecation for details.
+84:  Note: Some input files use or override a deprecated API.
+85:  /home/runner/work/TV/TV/app/src/main/java/app/antenne/tv/PlayerActivity.java:313: error: method create in class Players cannot be applied to given types;
+97:* Exception is:
+98:org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileReleaseJavaWithJavac'.
+107:	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+130:Caused by: org.gradle.api.internal.tasks.compile.CompilationFailedException: Compilation failed; see the compiler output below.
+131:Note: Recompile with -Xlint:deprecation for details.
+132:Note: Some input files use or override a deprecated API.
+133:/home/runner/work/TV/TV/app/src/main/java/app/antenne/tv/PlayerActivity.java:313: error: method create in class Players cannot be applied to given types;
+268:	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+293:BUILD FAILED in 26s
