@@ -11,58 +11,42 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.media3.common.PlaybackException;
-import androidx.media3.common.Player;
-import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.ui.AspectRatioFrameLayout;
-import androidx.media3.ui.PlayerView;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Live-TV: links Kategorien (Favoriten ganz oben), in der Mitte Sender mit Logo und laufender
- * Sendung, rechts eine Vorschau mit Jetzt/Danach. OK lang drücken = Favorit.
+ * Live-TV im Apple-TV-Stil: links schlanke Kategorien (Favoriten ganz oben), rechts grosse
+ * Kacheln mit Senderlogo, laufender Sendung und Fortschritt. OK lang drücken = Favorit.
  */
 public class LiveScreen extends Screen implements Epg.Listener {
 
-    private RecyclerView catList, chList;
+    private static final int COLUMNS = 4;
+
+    private TvList catList, grid;
     private CatAdapter catAdapter;
-    private ChAdapter chAdapter;
+    private TileAdapter tileAdapter;
     private final List<String[]> cats = new ArrayList<>(); // {key, name, count}
     private String selectedCat;
     private List<Model.Channel> shown = new ArrayList<>();
     private Model.Channel focused;
-    private TextView listTitle, listCount, empty;
-
-    // Vorschau
-    private FrameLayout previewBox;
-    private PlayerView playerView;
-    private ExoPlayer player;
-    private ImageView previewLogo;
-    private TextView previewHint;
-    private ImageView infoLogo;
-    private TextView infoName, infoNowTitle, infoTime, infoDesc, infoNext, infoBadge;
-    private Ui.Bar infoBar;
+    private TextView listTitle, listSub, empty;
     private boolean visible;
-    private String previewKey;
-
     private String pendingCat;
-    private final Runnable startPreview = this::doStartPreview;
+
     private final Runnable selectCat = () -> {
-        if (pendingCat != null) selectCategory(pendingCat, false);
+        if (pendingCat != null && !pendingCat.equals(selectedCat)) selectCategory(pendingCat, false);
     };
     private final Runnable tick = new Runnable() {
         @Override
         public void run() {
             if (!visible) return;
-            if (chAdapter != null) chAdapter.notifyItemRangeChanged(0, shown.size(), "epg");
-            updateInfo();
+            refreshEpg();
             Bg.later(this, 30_000);
         }
     };
+    private final Runnable epgRefresh = this::refreshEpg;
 
     public LiveScreen(MainActivity a) {
         super(a);
@@ -73,126 +57,50 @@ public class LiveScreen extends Screen implements Epg.Listener {
         Context c = a;
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(Ui.dp(c, 30), Ui.dp(c, 84), Ui.dp(c, 32), 0);
-        row.setClipChildren(false);
-        row.setClipToPadding(false);
+        row.setPadding(Ui.dp(c, 28), Ui.dp(c, 80), Ui.dp(c, 20), 0);
 
         // ---- Kategorien ----
         LinearLayout catCol = new LinearLayout(c);
         catCol.setOrientation(LinearLayout.VERTICAL);
-        catCol.setClipChildren(false);
-        TextView ch = Ui.text(c, 13, Ui.TEXT3, Ui.bold(c));
+        TextView ch = Ui.text(c, 12, Ui.TEXT3, Ui.bold(c));
         ch.setText("KATEGORIEN");
         ch.setLetterSpacing(0.12f);
-        catCol.addView(ch, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), Ui.dp(c, 16), 0, 0, Ui.dp(c, 10)));
-        catList = new RecyclerView(c);
-        catList.setLayoutManager(new LinearLayoutManager(c));
-        catList.setClipToPadding(false);
-        catList.setClipChildren(false);
-        catList.setPadding(Ui.dp(c, 6), Ui.dp(c, 4), Ui.dp(c, 6), Ui.dp(c, 40));
-        catList.setItemAnimator(null);
+        catCol.addView(ch, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), Ui.dp(c, 16), Ui.dp(c, 8), 0, Ui.dp(c, 6)));
+        FrameLayout catClip = new FrameLayout(c); // schneidet sauber ab: nichts rutscht über die Überschrift
+        catList = new TvList(c, false, 0.3f);
+        catList.setPadding(Ui.dp(c, 4), Ui.dp(c, 6), Ui.dp(c, 4), Ui.dp(c, 30));
         catAdapter = new CatAdapter();
         catList.setAdapter(catAdapter);
-        catCol.addView(catList, Ui.lin(Ui.MATCH, Ui.MATCH));
+        catClip.addView(catList, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
+        catCol.addView(catClip, Ui.lin(Ui.MATCH, 0, 1f));
         row.addView(catCol, Ui.lin(Ui.dp(c, 196), Ui.MATCH));
 
-        // ---- Sender ----
-        LinearLayout chCol = new LinearLayout(c);
-        chCol.setOrientation(LinearLayout.VERTICAL);
-        chCol.setClipChildren(false);
+        // ---- Kacheln ----
+        LinearLayout gridCol = new LinearLayout(c);
+        gridCol.setOrientation(LinearLayout.VERTICAL);
         LinearLayout head = new LinearLayout(c);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.BOTTOM);
-        listTitle = Ui.lines(Ui.text(c, 26, Ui.TEXT, Ui.bold(c)), 1);
+        listTitle = Ui.lines(Ui.text(c, 24, Ui.TEXT, Ui.bold(c)), 1);
         head.addView(listTitle, Ui.lin(0, Ui.WRAP, 1f));
-        listCount = Ui.text(c, 14, Ui.TEXT3, Ui.semibold(c));
-        head.addView(listCount);
-        chCol.addView(head, Ui.margins(Ui.lin(Ui.MATCH, Ui.WRAP), Ui.dp(c, 14), 0, Ui.dp(c, 14), Ui.dp(c, 8)));
-        FrameLayout listBox = new FrameLayout(c);
-        listBox.setClipChildren(false);
-        chList = new RecyclerView(c);
-        chList.setLayoutManager(new LinearLayoutManager(c));
-        chList.setClipToPadding(false);
-        chList.setClipChildren(false);
-        chList.setPadding(Ui.dp(c, 8), Ui.dp(c, 6), Ui.dp(c, 8), Ui.dp(c, 60));
-        chList.setItemAnimator(null);
-        chAdapter = new ChAdapter();
-        chList.setAdapter(chAdapter);
-        listBox.addView(chList, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
-        empty = Ui.text(c, 18, Ui.TEXT2, Ui.medium(c));
+        listSub = Ui.lines(Ui.text(c, 13, Ui.TEXT3, Ui.semibold(c)), 1);
+        head.addView(listSub, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), Ui.dp(c, 12), 0, Ui.dp(c, 12), Ui.dp(c, 3)));
+        gridCol.addView(head, Ui.margins(Ui.lin(Ui.MATCH, Ui.WRAP), Ui.dp(c, 14), 0, 0, Ui.dp(c, 4)));
+        FrameLayout gridClip = new FrameLayout(c);
+        grid = new TvList(c, COLUMNS, 0.25f);
+        grid.setPadding(Ui.dp(c, 10), Ui.dp(c, 14), Ui.dp(c, 10), Ui.dp(c, 60));
+        tileAdapter = new TileAdapter();
+        grid.setAdapter(tileAdapter);
+        gridClip.addView(grid, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
+        empty = Ui.text(c, 17, Ui.TEXT2, Ui.medium(c));
         empty.setGravity(Gravity.CENTER);
         empty.setVisibility(View.GONE);
-        listBox.addView(empty, Ui.frame(Ui.dp(c, 380), Ui.WRAP, Gravity.CENTER));
-        chCol.addView(listBox, Ui.lin(Ui.MATCH, Ui.MATCH));
-        row.addView(chCol, Ui.margins(Ui.lin(0, Ui.MATCH, 1f), Ui.dp(c, 8), 0, Ui.dp(c, 14), 0));
-
-        // ---- Vorschau & Info ----
-        LinearLayout info = new LinearLayout(c);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(0, Ui.dp(c, 26), 0, 0);
-        previewBox = new FrameLayout(c);
-        previewBox.setBackground(Ui.round(0xFF000000, Ui.dp(c, 18)));
-        Ui.clipRound(previewBox, Ui.dp(c, 18));
-        playerView = new PlayerView(c);
-        playerView.setUseController(false);
-        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
-        playerView.setShutterBackgroundColor(0xFF000000);
-        playerView.setKeepContentOnPlayerReset(false);
-        previewBox.addView(playerView, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
-        previewLogo = new ImageView(c);
-        previewBox.addView(previewLogo, Ui.frame(Ui.dp(c, 120), Ui.dp(c, 72), Gravity.CENTER));
-        previewHint = Ui.text(c, 12, Ui.TEXT2, Ui.semibold(c));
-        previewHint.setText("Vorschau …");
-        FrameLayout.LayoutParams hl = Ui.frame(Ui.WRAP, Ui.WRAP, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        hl.bottomMargin = Ui.dp(c, 12);
-        previewBox.addView(previewHint, hl);
-        infoBadge = Ui.badge(c, "LIVE", Ui.LIVE, 0xFFFFFFFF);
-        FrameLayout.LayoutParams bl = Ui.frame(Ui.WRAP, Ui.WRAP, Gravity.TOP | Gravity.START);
-        bl.setMargins(Ui.dp(c, 12), Ui.dp(c, 12), 0, 0);
-        previewBox.addView(infoBadge, bl);
-        info.addView(previewBox, Ui.lin(Ui.dp(c, 300), Ui.dp(c, 169)));
-
-        LinearLayout nameRow = new LinearLayout(c);
-        nameRow.setOrientation(LinearLayout.HORIZONTAL);
-        nameRow.setGravity(Gravity.CENTER_VERTICAL);
-        FrameLayout logoTile = new FrameLayout(c);
-        logoTile.setBackground(Ui.round(Ui.GLASS, Ui.dp(c, 10)));
-        logoTile.setPadding(Ui.dp(c, 6), Ui.dp(c, 4), Ui.dp(c, 6), Ui.dp(c, 4));
-        infoLogo = new ImageView(c);
-        logoTile.addView(infoLogo, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
-        nameRow.addView(logoTile, Ui.lin(Ui.dp(c, 60), Ui.dp(c, 38)));
-        infoName = Ui.lines(Ui.text(c, 20, Ui.TEXT, Ui.bold(c)), 1);
-        nameRow.addView(infoName, Ui.margins(Ui.lin(0, Ui.WRAP, 1f), Ui.dp(c, 12), 0, 0, 0));
-        info.addView(nameRow, Ui.margins(Ui.lin(Ui.dp(c, 300), Ui.WRAP), 0, Ui.dp(c, 18), 0, 0));
-
-        TextView nowLbl = Ui.text(c, 12, Ui.ACCENT, Ui.bold(c));
-        nowLbl.setText("JETZT");
-        nowLbl.setLetterSpacing(0.12f);
-        info.addView(nowLbl, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), 0, Ui.dp(c, 18), 0, 0));
-        infoNowTitle = Ui.lines(Ui.text(c, 19, Ui.TEXT, Ui.semibold(c)), 2);
-        info.addView(infoNowTitle, Ui.margins(Ui.lin(Ui.dp(c, 300), Ui.WRAP), 0, Ui.dp(c, 6), 0, 0));
-        LinearLayout timeRow = new LinearLayout(c);
-        timeRow.setOrientation(LinearLayout.HORIZONTAL);
-        timeRow.setGravity(Gravity.CENTER_VERTICAL);
-        infoTime = Ui.text(c, 14, Ui.TEXT2, Ui.medium(c));
-        timeRow.addView(infoTime);
-        infoBar = new Ui.Bar(c, 0x33FFFFFF, Ui.TEXT);
-        timeRow.addView(infoBar, Ui.margins(Ui.lin(0, Ui.dp(c, 4), 1f), Ui.dp(c, 12), 0, 0, 0));
-        info.addView(timeRow, Ui.margins(Ui.lin(Ui.dp(c, 300), Ui.WRAP), 0, Ui.dp(c, 10), 0, 0));
-        infoDesc = Ui.lines(Ui.text(c, 14, Ui.TEXT2, Ui.regular(c)), 3);
-        infoDesc.setLineSpacing(Ui.dp(c, 3), 1f);
-        info.addView(infoDesc, Ui.margins(Ui.lin(Ui.dp(c, 300), Ui.WRAP), 0, Ui.dp(c, 14), 0, 0));
-        infoNext = Ui.lines(Ui.text(c, 14, Ui.TEXT3, Ui.medium(c)), 2);
-        info.addView(infoNext, Ui.margins(Ui.lin(Ui.dp(c, 300), Ui.WRAP), 0, Ui.dp(c, 14), 0, 0));
-
-        TextView hint = Ui.text(c, 12, Ui.TEXT3, Ui.medium(c));
-        hint.setText("OK lang drücken: ★ Favorit");
-        info.addView(hint, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), 0, Ui.dp(c, 12), 0, 0));
-        row.addView(info, Ui.lin(Ui.dp(c, 300), Ui.MATCH));
+        gridClip.addView(empty, Ui.frame(Ui.dp(c, 420), Ui.WRAP, Gravity.CENTER));
+        gridCol.addView(gridClip, Ui.lin(Ui.MATCH, 0, 1f));
+        row.addView(gridCol, Ui.margins(Ui.lin(0, Ui.MATCH, 1f), Ui.dp(c, 6), 0, 0, 0));
 
         rebuildCategories();
-        String first = Store.favorites().isEmpty() ? "all" : "fav";
-        selectCategory(first, false);
+        selectCategory(Store.favorites().isEmpty() ? "all" : "fav", false);
         return row;
     }
 
@@ -201,8 +109,7 @@ public class LiveScreen extends Screen implements Epg.Listener {
     private void rebuildCategories() {
         cats.clear();
         Library lib = Library.get();
-        int favs = lib.channelsFor("fav").size();
-        cats.add(new String[]{"fav", "★  Favoriten", String.valueOf(favs)});
+        cats.add(new String[]{"fav", "★  Favoriten", String.valueOf(lib.channelsFor("fav").size())});
         int rec = lib.channelsFor("recent").size();
         if (rec > 0) cats.add(new String[]{"recent", "Zuletzt gesehen", String.valueOf(rec)});
         cats.add(new String[]{"all", "Alle Sender", String.valueOf(lib.channels.size())});
@@ -212,14 +119,22 @@ public class LiveScreen extends Screen implements Epg.Listener {
         if (catAdapter != null) catAdapter.notifyDataSetChanged();
     }
 
-    private void selectCategory(String key, boolean focusList) {
+    /** Nur die Darstellung der sichtbaren Kategorien auffrischen – ohne die Liste neu aufzubauen. */
+    private void restyleCategories() {
+        for (int i = 0; i < catList.getChildCount(); i++) {
+            RecyclerView.ViewHolder vh = catList.getChildViewHolder(catList.getChildAt(i));
+            if (vh instanceof CatAdapter.VH) catAdapter.style((CatAdapter.VH) vh, vh.itemView.hasFocus());
+        }
+    }
+
+    private void selectCategory(String key, boolean focusGrid) {
         selectedCat = key;
         shown = Library.get().channelsFor(key);
         listTitle.setText(Library.get().categoryName(key));
-        listCount.setText(shown.size() + (shown.size() == 1 ? " Sender" : " Sender"));
-        catAdapter.notifyDataSetChanged();
-        chAdapter.notifyDataSetChanged();
-        chList.scrollToPosition(0);
+        listSub.setText(shown.size() + " Sender  ·  OK lang: ★ Favorit");
+        restyleCategories();
+        tileAdapter.notifyDataSetChanged();
+        grid.scrollToPosition(0);
         if (shown.isEmpty()) {
             empty.setVisibility(View.VISIBLE);
             empty.setText("fav".equals(key)
@@ -228,38 +143,16 @@ public class LiveScreen extends Screen implements Epg.Listener {
         } else {
             empty.setVisibility(View.GONE);
         }
-        if (focused == null && !shown.isEmpty()) {
-            focused = shown.get(0);
-            updateInfo();
-        }
-        if (focusList && !shown.isEmpty()) chList.post(() -> focusChannelAt(0));
+        if (focusGrid && !shown.isEmpty()) grid.post(() -> grid.focusPosition(0));
     }
 
-    private void focusChannelAt(int pos) {
-        RecyclerView.ViewHolder vh = chList.findViewHolderForAdapterPosition(pos);
-        if (vh != null) vh.itemView.requestFocus();
-        else {
-            chList.scrollToPosition(pos);
-            chList.post(() -> {
-                RecyclerView.ViewHolder v2 = chList.findViewHolderForAdapterPosition(pos);
-                if (v2 != null) v2.itemView.requestFocus();
-            });
-        }
+    private int catIndex() {
+        for (int i = 0; i < cats.size(); i++) if (cats.get(i)[0].equals(selectedCat)) return i;
+        return 0;
     }
 
     private void focusSelectedCategory() {
-        int idx = 0;
-        for (int i = 0; i < cats.size(); i++) if (cats.get(i)[0].equals(selectedCat)) idx = i;
-        int fi = idx;
-        RecyclerView.ViewHolder vh = catList.findViewHolderForAdapterPosition(fi);
-        if (vh != null) vh.itemView.requestFocus();
-        else {
-            catList.scrollToPosition(fi);
-            catList.post(() -> {
-                RecyclerView.ViewHolder v2 = catList.findViewHolderForAdapterPosition(fi);
-                if (v2 != null) v2.itemView.requestFocus();
-            });
-        }
+        catList.focusPosition(catIndex());
     }
 
     private final class CatAdapter extends RecyclerView.Adapter<CatAdapter.VH> {
@@ -280,15 +173,15 @@ public class LiveScreen extends Screen implements Epg.Listener {
             LinearLayout v = new LinearLayout(c);
             v.setOrientation(LinearLayout.HORIZONTAL);
             v.setGravity(Gravity.CENTER_VERTICAL);
-            v.setPadding(Ui.dp(c, 16), Ui.dp(c, 11), Ui.dp(c, 14), Ui.dp(c, 11));
+            v.setPadding(Ui.dp(c, 14), Ui.dp(c, 10), Ui.dp(c, 12), Ui.dp(c, 10));
             v.setFocusable(true);
             v.setClickable(true);
-            TextView name = Ui.lines(Ui.text(c, 16, Ui.TEXT2, Ui.semibold(c)), 1);
+            TextView name = Ui.lines(Ui.text(c, 15, Ui.TEXT2, Ui.semibold(c)), 1);
             v.addView(name, Ui.lin(0, Ui.WRAP, 1f));
-            TextView count = Ui.text(c, 13, Ui.TEXT3, Ui.semibold(c));
+            TextView count = Ui.text(c, 12, Ui.TEXT3, Ui.semibold(c));
             v.addView(count, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), Ui.dp(c, 8), 0, 0, 0));
             RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(Ui.MATCH, Ui.WRAP);
-            lp.bottomMargin = Ui.dp(c, 4);
+            lp.bottomMargin = Ui.dp(c, 3);
             v.setLayoutParams(lp);
             VH vh = new VH(v, name, count);
             v.setOnFocusChangeListener((view, has) -> {
@@ -297,7 +190,7 @@ public class LiveScreen extends Screen implements Epg.Listener {
                 if (has && pos >= 0 && pos < cats.size()) {
                     pendingCat = cats.get(pos)[0];
                     Bg.cancel(selectCat);
-                    if (!pendingCat.equals(selectedCat)) Bg.later(selectCat, 220);
+                    Bg.later(selectCat, 260);
                 }
             });
             v.setOnClickListener(view -> {
@@ -306,14 +199,14 @@ public class LiveScreen extends Screen implements Epg.Listener {
                 Bg.cancel(selectCat);
                 String k = cats.get(pos)[0];
                 if (!k.equals(selectedCat)) selectCategory(k, true);
-                else if (!shown.isEmpty()) focusChannelAt(0);
+                else if (!shown.isEmpty()) grid.focusPosition(0);
             });
             v.setOnKeyListener((view, keyCode, e) -> {
                 if (e.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     Bg.cancel(selectCat);
                     int pos = vh.getBindingAdapterPosition();
                     if (pos >= 0 && !cats.get(pos)[0].equals(selectedCat)) selectCategory(cats.get(pos)[0], true);
-                    else if (!shown.isEmpty()) focusChannelAt(Math.max(0, indexOf(focused)));
+                    else if (!shown.isEmpty()) grid.focusPosition(Math.max(0, shown.indexOf(focused)));
                     return true;
                 }
                 return false;
@@ -321,21 +214,19 @@ public class LiveScreen extends Screen implements Epg.Listener {
             return vh;
         }
 
-        private void style(VH vh, boolean focused) {
+        void style(VH vh, boolean has) {
             Context c = vh.itemView.getContext();
             int pos = vh.getBindingAdapterPosition();
             boolean sel = pos >= 0 && pos < cats.size() && cats.get(pos)[0].equals(selectedCat);
             float r = Ui.dp(c, 12);
-            if (focused) {
-                vh.itemView.setBackground(Ui.round(0xFFFFFFFF, r));
-                vh.name.setTextColor(0xFF111111);
-                vh.count.setTextColor(0x99111111);
-                vh.itemView.animate().scaleX(1.04f).scaleY(1.04f).translationZ(Ui.dp(c, 8)).setDuration(130).start();
+            if (has) {
+                vh.itemView.setBackground(Ui.round(Ui.FOCUS_BG, r));
+                vh.name.setTextColor(Ui.FOCUS_FG);
+                vh.count.setTextColor(Ui.focusInk(0x99));
             } else {
                 vh.itemView.setBackground(sel ? Ui.round(Ui.GLASS_HI, r) : null);
                 vh.name.setTextColor(sel ? Ui.TEXT : Ui.TEXT2);
                 vh.count.setTextColor(Ui.TEXT3);
-                vh.itemView.animate().scaleX(1f).scaleY(1f).translationZ(0).setDuration(130).start();
             }
         }
 
@@ -353,34 +244,37 @@ public class LiveScreen extends Screen implements Epg.Listener {
         }
     }
 
-    private int indexOf(Model.Channel c) {
-        if (c == null) return -1;
-        for (int i = 0; i < shown.size(); i++) if (shown.get(i) == c) return i;
-        return -1;
+    // ---------- Senderkacheln ----------
+
+    /** Rahmen mit festem 16:9-Seitenverhältnis. */
+    static final class Ratio extends FrameLayout {
+        Ratio(Context c) {
+            super(c);
+        }
+
+        @Override
+        protected void onMeasure(int w, int h) {
+            int width = MeasureSpec.getSize(w);
+            super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(width * 9 / 16, MeasureSpec.EXACTLY));
+        }
     }
 
-    // ---------- Sender ----------
-
-    private final class ChAdapter extends RecyclerView.Adapter<ChAdapter.VH> {
+    private final class TileAdapter extends RecyclerView.Adapter<TileAdapter.VH> {
         final class VH extends RecyclerView.ViewHolder {
-            final LinearLayout root;
-            final TextView num, name, now, time, star;
+            final Ratio card;
             final ImageView logo;
-            final FrameLayout logoTile;
+            final TextView star, name, now;
             final Ui.Bar bar;
             Model.Channel ch;
 
-            VH(LinearLayout root, TextView num, FrameLayout logoTile, ImageView logo, TextView name,
-               TextView star, TextView now, TextView time, Ui.Bar bar) {
-                super(root);
-                this.root = root;
-                this.num = num;
-                this.logoTile = logoTile;
+            VH(View v, Ratio card, ImageView logo, TextView star, TextView name, TextView now, Ui.Bar bar) {
+                super(v);
+                this.card = card;
                 this.logo = logo;
-                this.name = name;
                 this.star = star;
+                this.name = name;
                 this.now = now;
-                this.time = time;
                 this.bar = bar;
             }
         }
@@ -390,121 +284,101 @@ public class LiveScreen extends Screen implements Epg.Listener {
         public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             Context c = parent.getContext();
             LinearLayout v = new LinearLayout(c);
-            v.setOrientation(LinearLayout.HORIZONTAL);
-            v.setGravity(Gravity.CENTER_VERTICAL);
-            v.setPadding(Ui.dp(c, 8), Ui.dp(c, 9), Ui.dp(c, 16), Ui.dp(c, 9));
+            v.setOrientation(LinearLayout.VERTICAL);
             v.setFocusable(true);
             v.setClickable(true);
             v.setLongClickable(true);
-            TextView num = Ui.text(c, 14, Ui.TEXT3, Ui.semibold(c));
-            num.setGravity(Gravity.END);
-            v.addView(num, Ui.lin(Ui.dp(c, 28), Ui.WRAP));
-            FrameLayout tile = new FrameLayout(c);
-            tile.setPadding(Ui.dp(c, 8), Ui.dp(c, 6), Ui.dp(c, 8), Ui.dp(c, 6));
-            tile.setBackground(Ui.round(Ui.GLASS, Ui.dp(c, 12)));
-            ImageView logo = new ImageView(c);
-            tile.addView(logo, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
-            v.addView(tile, Ui.margins(Ui.lin(Ui.dp(c, 84), Ui.dp(c, 52)), Ui.dp(c, 10), 0, Ui.dp(c, 14), 0));
+            v.setClipChildren(false);
+            int gap = Ui.dp(c, 9);
+            v.setPadding(gap, gap, gap, Ui.dp(c, 14));
 
-            LinearLayout text = new LinearLayout(c);
-            text.setOrientation(LinearLayout.VERTICAL);
-            LinearLayout top = new LinearLayout(c);
-            top.setOrientation(LinearLayout.HORIZONTAL);
-            top.setGravity(Gravity.CENTER_VERTICAL);
-            TextView name = Ui.lines(Ui.text(c, 17, Ui.TEXT, Ui.semibold(c)), 1);
-            top.addView(name, Ui.lin(0, Ui.WRAP, 1f));
-            TextView star = Ui.text(c, 18, Ui.FAV, Ui.bold(c));
+            Ratio card = new Ratio(c);
+            float r = Ui.dp(c, 16);
+            card.setBackground(Ui.round(Ui.TILE, r));
+            Ui.clipRound(card, r);
+            ImageView logo = new ImageView(c);
+            FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH);
+            llp.setMargins(Ui.dp(c, 22), Ui.dp(c, 16), Ui.dp(c, 22), Ui.dp(c, 16));
+            card.addView(logo, llp);
+            TextView star = Ui.text(c, 14, Ui.FAV, Ui.bold(c));
             star.setText("★");
-            top.addView(star, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), Ui.dp(c, 8), 0, 0, 0));
-            text.addView(top, Ui.lin(Ui.MATCH, Ui.WRAP));
-            TextView now = Ui.lines(Ui.text(c, 14, Ui.TEXT2, Ui.medium(c)), 1);
-            text.addView(now, Ui.margins(Ui.lin(Ui.MATCH, Ui.WRAP), 0, Ui.dp(c, 5), 0, 0));
-            LinearLayout br = new LinearLayout(c);
-            br.setOrientation(LinearLayout.HORIZONTAL);
-            br.setGravity(Gravity.CENTER_VERTICAL);
-            Ui.Bar bar = new Ui.Bar(c, 0x26FFFFFF, 0xCCFFFFFF);
-            br.addView(bar, Ui.lin(0, Ui.dp(c, 3), 1f));
-            TextView time = Ui.text(c, 12, Ui.TEXT3, Ui.semibold(c));
-            br.addView(time, Ui.margins(Ui.lin(Ui.WRAP, Ui.WRAP), Ui.dp(c, 10), 0, 0, 0));
-            text.addView(br, Ui.margins(Ui.lin(Ui.MATCH, Ui.WRAP), 0, Ui.dp(c, 8), 0, 0));
-            v.addView(text, Ui.lin(0, Ui.WRAP, 1f));
+            FrameLayout.LayoutParams slp = Ui.frame(Ui.WRAP, Ui.WRAP, Gravity.TOP | Gravity.END);
+            slp.setMargins(0, Ui.dp(c, 7), Ui.dp(c, 9), 0);
+            card.addView(star, slp);
+            Ui.Bar bar = new Ui.Bar(c, 0x40FFFFFF, 0xF2FFFFFF);
+            FrameLayout.LayoutParams blp = Ui.frame(Ui.MATCH, Ui.dp(c, 3), Gravity.BOTTOM);
+            blp.setMargins(Ui.dp(c, 12), 0, Ui.dp(c, 12), Ui.dp(c, 8));
+            card.addView(bar, blp);
+            v.addView(card, Ui.lin(Ui.MATCH, Ui.WRAP));
+
+            TextView name = Ui.lines(Ui.text(c, 14, Ui.TEXT, Ui.semibold(c)), 1);
+            v.addView(name, Ui.margins(Ui.lin(Ui.MATCH, Ui.WRAP), Ui.dp(c, 2), Ui.dp(c, 10), 0, 0));
+            TextView now = Ui.lines(Ui.text(c, 12, Ui.TEXT3, Ui.medium(c)), 1);
+            v.addView(now, Ui.margins(Ui.lin(Ui.MATCH, Ui.WRAP), Ui.dp(c, 2), Ui.dp(c, 4), 0, 0));
 
             RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(Ui.MATCH, Ui.WRAP);
-            lp.bottomMargin = Ui.dp(c, 6);
             v.setLayoutParams(lp);
-            VH vh = new VH(v, num, tile, logo, name, star, now, time, bar);
-
+            VH vh = new VH(v, card, logo, star, name, now, bar);
+            android.graphics.drawable.Drawable ringD = Ui.ring(Ui.RING, Ui.dp(c, 3), r);
             v.setOnFocusChangeListener((view, has) -> {
-                style(vh, has);
-                if (has && vh.ch != null) {
-                    focused = vh.ch;
-                    updateInfo();
-                    schedulePreview();
-                }
+                card.animate().scaleX(has ? 1.08f : 1f).scaleY(has ? 1.08f : 1f)
+                        .translationZ(has ? Ui.dp(c, 12) : 0).setDuration(150).start();
+                card.setForeground(has ? ringD : null);
+                card.setBackground(Ui.round(has ? (Ui.dark ? 0x38FFFFFF : 0xFF4A4A4E) : Ui.TILE, r));
+                // Text rückt mit nach unten, damit die vergrösserte Kachel nichts überdeckt
+                name.animate().translationY(has ? Ui.dp(c, 6) : 0).setDuration(150).start();
+                now.animate().translationY(has ? Ui.dp(c, 6) : 0).setDuration(150).start();
+                name.setTextColor(has ? Ui.TEXT : Ui.ink(0xD9));
+                if (has && vh.ch != null) focused = vh.ch;
             });
             v.setOnClickListener(view -> {
-                if (vh.ch != null) {
-                    stopPreview();
-                    a.playChannel(vh.ch, selectedCat);
-                }
+                if (vh.ch != null) a.playChannel(vh.ch, selectedCat);
             });
             v.setOnLongClickListener(view -> {
-                if (vh.ch == null) return true;
-                boolean fav = Store.toggleFavorite(vh.ch.key());
-                Ui.toast(a, fav ? "★  " + vh.ch.name + " zu Favoriten hinzugefügt" : vh.ch.name + " aus Favoriten entfernt");
-                vh.star.setVisibility(fav ? View.VISIBLE : View.GONE);
-                rebuildCategories();
-                if ("fav".equals(selectedCat) && !fav) {
-                    int pos = vh.getBindingAdapterPosition();
-                    selectCategory("fav", false);
-                    if (!shown.isEmpty()) focusChannelAt(Math.min(pos, shown.size() - 1));
-                    else focusSelectedCategory();
-                }
+                toggleFavorite(vh);
                 return true;
             });
             v.setOnKeyListener((view, keyCode, e) -> {
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    focusSelectedCategory();
+                if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_BOOKMARK) {
+                    toggleFavorite(vh);
                     return true;
                 }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return true;
-                if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_BOOKMARK) {
-                    view.performLongClick();
-                    return true;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    int pos = vh.getBindingAdapterPosition();
+                    if (pos >= 0 && pos % COLUMNS == 0) {
+                        focusSelectedCategory();
+                        return true;
+                    }
                 }
                 return false;
             });
             return vh;
         }
 
-        private void style(VH vh, boolean has) {
-            Context c = vh.itemView.getContext();
-            float r = Ui.dp(c, 18);
-            if (has) {
-                vh.root.setBackground(Ui.round(0xFFFFFFFF, r));
-                vh.name.setTextColor(0xFF111111);
-                vh.now.setTextColor(0xB3111111);
-                vh.num.setTextColor(0x80111111);
-                vh.time.setTextColor(0x80111111);
-                vh.bar.setColors(0x1F000000, 0xFF111111);
-                vh.logoTile.setBackground(Ui.round(0x14000000, Ui.dp(c, 12)));
-                vh.root.animate().scaleX(1.03f).scaleY(1.03f).translationZ(Ui.dp(c, 12)).setDuration(140).start();
-            } else {
-                vh.root.setBackground(null);
-                vh.name.setTextColor(Ui.TEXT);
-                vh.now.setTextColor(Ui.TEXT2);
-                vh.num.setTextColor(Ui.TEXT3);
-                vh.time.setTextColor(Ui.TEXT3);
-                vh.bar.setColors(0x26FFFFFF, 0xCCFFFFFF);
-                vh.logoTile.setBackground(Ui.round(Ui.GLASS, Ui.dp(c, 12)));
-                vh.root.animate().scaleX(1f).scaleY(1f).translationZ(0).setDuration(140).start();
+        private void toggleFavorite(VH vh) {
+            if (vh.ch == null) return;
+            boolean fav = Store.toggleFavorite(vh.ch.key());
+            Ui.toast(a, fav ? "★  " + vh.ch.name + " zu Favoriten hinzugefügt" : vh.ch.name + " aus Favoriten entfernt");
+            vh.star.setVisibility(fav ? View.VISIBLE : View.GONE);
+            updateFavCount();
+            if ("fav".equals(selectedCat) && !fav) {
+                int pos = vh.getBindingAdapterPosition();
+                shown = Library.get().channelsFor("fav");
+                notifyDataSetChanged();
+                listSub.setText(shown.size() + " Sender  ·  OK lang: ★ Favorit");
+                if (!shown.isEmpty()) grid.post(() -> grid.focusPosition(Math.min(pos, shown.size() - 1)));
+                else {
+                    empty.setVisibility(View.VISIBLE);
+                    empty.setText("Noch keine Favoriten.\nHalte bei einem Sender OK gedrückt, um ihn mit ★ zu markieren.");
+                    focusSelectedCategory();
+                }
             }
         }
 
         @Override
         public void onBindViewHolder(@NonNull VH h, int position, @NonNull List<Object> payloads) {
-            if (!payloads.isEmpty() && h.ch == shown.get(position)) {
+            if (!payloads.isEmpty() && position < shown.size() && h.ch == shown.get(position)) {
                 bindEpg(h);
                 return;
             }
@@ -515,27 +389,21 @@ public class LiveScreen extends Screen implements Epg.Listener {
         public void onBindViewHolder(@NonNull VH h, int position) {
             Model.Channel c = shown.get(position);
             h.ch = c;
-            h.num.setText(String.valueOf(c.num > 0 && "all".equals(selectedCat) ? c.num : position + 1));
             h.name.setText(c.name);
             h.star.setVisibility(Store.isFavorite(c.key()) ? View.VISIBLE : View.GONE);
             Img.logo(h.logo, c.logo, c.name);
             bindEpg(h);
-            style(h, h.itemView.hasFocus());
         }
 
         private void bindEpg(VH h) {
             Model.Programme p = Epg.now(h.ch);
-            long now = System.currentTimeMillis();
             if (p != null) {
-                h.now.setText(p.title);
-                h.time.setText(Ui.time(p.start) + " – " + Ui.time(p.end));
-                h.bar.setProgress(p.progress(now));
+                h.now.setText(Ui.time(p.start) + "  " + p.title);
+                h.bar.setProgress(p.progress(System.currentTimeMillis()));
                 h.bar.setVisibility(View.VISIBLE);
-                h.time.setVisibility(View.VISIBLE);
             } else {
-                h.now.setText(Epg.isLoading(h.ch) || Epg.get(h.ch) == null ? "Programm wird geladen …" : "Keine Programminfos");
+                h.now.setText(Epg.get(h.ch) == null ? "Programm wird geladen …" : "Keine Programminfos");
                 h.bar.setVisibility(View.INVISIBLE);
-                h.time.setVisibility(View.GONE);
             }
         }
 
@@ -545,87 +413,21 @@ public class LiveScreen extends Screen implements Epg.Listener {
         }
     }
 
-    // ---------- Info-Bereich ----------
-
-    private void updateInfo() {
-        Model.Channel c = focused;
-        if (c == null || infoName == null) return;
-        infoName.setText(c.name);
-        Img.logo(infoLogo, c.logo, c.name);
-        if (!c.key().equals(previewKey)) {
-            Img.logo(previewLogo, c.logo, c.name);
-            previewLogo.setVisibility(View.VISIBLE);
-        }
-        Model.Programme p = Epg.now(c);
-        long now = System.currentTimeMillis();
-        if (p != null) {
-            infoNowTitle.setText(p.title);
-            long left = p.end - now;
-            infoTime.setText(Ui.time(p.start) + " – " + Ui.time(p.end) + "  ·  noch " + Ui.minutes(left));
-            infoBar.setProgress(p.progress(now));
-            infoBar.setVisibility(View.VISIBLE);
-            infoDesc.setText(p.desc);
-            infoDesc.setVisibility(p.desc.isEmpty() ? View.GONE : View.VISIBLE);
-        } else {
-            infoNowTitle.setText(Epg.get(c) == null ? "Programm wird geladen …" : "Keine Programminfos verfügbar");
-            infoTime.setText("");
-            infoBar.setVisibility(View.INVISIBLE);
-            infoDesc.setVisibility(View.GONE);
-        }
-        Model.Programme n = Epg.next(c);
-        infoNext.setText(n == null ? "" : "Danach  " + Ui.time(n.start) + "   " + n.title);
+    private void updateFavCount() {
+        if (cats.isEmpty()) return;
+        cats.get(0)[2] = String.valueOf(Library.get().channelsFor("fav").size());
+        catAdapter.notifyItemChanged(0);
     }
 
-    // ---------- Vorschau ----------
-
-    private void schedulePreview() {
-        Bg.cancel(startPreview);
-        if (!Prefs.preview()) return;
-        Bg.later(startPreview, 900);
-    }
-
-    private void doStartPreview() {
-        if (!visible || focused == null || !Prefs.preview()) return;
-        if (focused.key().equals(previewKey) && player != null) return;
-        String url = Library.get().streamUrl(focused);
-        if (url == null) return;
-        if (player == null) {
-            player = Players.create(a, true);
-            player.addListener(new Player.Listener() {
-                @Override
-                public void onRenderedFirstFrame() {
-                    previewLogo.animate().alpha(0f).setDuration(250).start();
-                    previewHint.setVisibility(View.GONE);
-                }
-
-                @Override
-                public void onPlayerError(@NonNull PlaybackException error) {
-                    previewHint.setText("Vorschau nicht verfügbar");
-                    previewHint.setVisibility(View.VISIBLE);
-                    previewLogo.setAlpha(1f);
-                }
-            });
-            playerView.setPlayer(player);
+    /** Programminfos in den sichtbaren Kacheln auffrischen (ohne Fokus oder Scrollen zu stören). */
+    private void refreshEpg() {
+        if (!visible || tileAdapter == null) return;
+        if (grid.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) {
+            Bg.cancel(epgRefresh);
+            Bg.later(epgRefresh, 400);
+            return;
         }
-        previewKey = focused.key();
-        previewLogo.setAlpha(1f);
-        previewHint.setText("Vorschau …");
-        previewHint.setVisibility(View.VISIBLE);
-        player.setMediaItem(Players.item(url));
-        player.prepare();
-        player.setPlayWhenReady(true);
-    }
-
-    private void stopPreview() {
-        Bg.cancel(startPreview);
-        previewKey = null;
-        if (player != null) {
-            playerView.setPlayer(null);
-            player.release();
-            player = null;
-        }
-        if (previewLogo != null) previewLogo.setAlpha(1f);
-        if (previewHint != null) previewHint.setVisibility(View.GONE);
+        tileAdapter.notifyItemRangeChanged(0, shown.size(), "epg");
     }
 
     // ---------- Lebenszyklus ----------
@@ -636,8 +438,7 @@ public class LiveScreen extends Screen implements Epg.Listener {
             focusSelectedCategory();
             return;
         }
-        int i = indexOf(focused);
-        focusChannelAt(Math.max(0, i));
+        grid.focusPosition(Math.max(0, shown.indexOf(focused)));
     }
 
     @Override
@@ -645,17 +446,23 @@ public class LiveScreen extends Screen implements Epg.Listener {
         visible = true;
         Epg.addListener(this);
         // Favoriten/Verlauf können sich im Player geändert haben
-        rebuildCategories();
+        int favs = Library.get().channelsFor("fav").size();
+        int rec = Library.get().channelsFor("recent").size();
+        boolean recentShown = cats.size() > 1 && "recent".equals(cats.get(1)[0]);
+        if (!cats.isEmpty() && (!cats.get(0)[2].equals(String.valueOf(favs)) || recentShown != (rec > 0))) {
+            rebuildCategories();
+        }
         if ("fav".equals(selectedCat) || "recent".equals(selectedCat)) {
             List<Model.Channel> now = Library.get().channelsFor(selectedCat);
-            if (now.size() != shown.size()) selectCategory(selectedCat, false);
-            else chAdapter.notifyDataSetChanged();
-        } else {
-            chAdapter.notifyDataSetChanged();
+            if (!now.equals(shown)) {
+                shown = now;
+                tileAdapter.notifyDataSetChanged();
+                listSub.setText(shown.size() + " Sender  ·  OK lang: ★ Favorit");
+                empty.setVisibility(shown.isEmpty() ? View.VISIBLE : View.GONE);
+            }
         }
         Bg.cancel(tick);
         Bg.later(tick, 30_000);
-        updateInfo();
     }
 
     @Override
@@ -663,25 +470,20 @@ public class LiveScreen extends Screen implements Epg.Listener {
         visible = false;
         Epg.removeListener(this);
         Bg.cancel(tick);
-        stopPreview();
-    }
-
-    @Override
-    public void onPause() {
-        stopPreview();
+        Bg.cancel(selectCat);
     }
 
     @Override
     public void onResume() {
         if (visible) {
             onShow();
-            if (focused != null && chList.hasFocus()) schedulePreview();
+            refreshEpg();
         }
     }
 
     @Override
     public boolean onBack() {
-        if (chList.hasFocus()) {
+        if (grid.hasFocus()) {
             focusSelectedCategory();
             return true;
         }
@@ -690,16 +492,11 @@ public class LiveScreen extends Screen implements Epg.Listener {
 
     @Override
     public void onEpgChanged() {
-        if (!visible) return;
-        chAdapter.notifyItemRangeChanged(0, shown.size(), "epg");
-        updateInfo();
+        refreshEpg();
     }
 
     @Override
     public void onLibraryChanged(String what) {
-        if ("logos".equals(what)) {
-            chAdapter.notifyItemRangeChanged(0, shown.size());
-            updateInfo();
-        }
+        if ("logos".equals(what)) tileAdapter.notifyItemRangeChanged(0, shown.size());
     }
 }
