@@ -186,6 +186,7 @@ public final class Library {
             else Epg.bulkFailed(channels);
         }
 
+        Bg.run(() -> prepareVariants(gen));
         Bg.run(() -> {
             if (Logos.fill(channels, dir)) fire("logos", gen);
         });
@@ -343,7 +344,7 @@ public final class Library {
     }
 
     private void clearAll() {
-        synchronized (this) {
+        synchronized (variantLock) {
             variantMap = null;
         }
         liveCats.clear();
@@ -414,15 +415,44 @@ public final class Library {
 
     // ---------- Qualitätsstufen eines Senders ----------
 
-    private Map<String, List<Model.Channel>> variantMap;
+    /** Fertig berechnete Fassungen je Sender-Schlüssel (im Hintergrund gebaut). */
+    private volatile Map<String, List<Model.Channel>> variantMap;
+    private final Object variantLock = new Object();
+    private int variantGen = -1;
 
-    /** Qualität aus dem Namen: 4 = 4K, 3 = FHD, 2 = HD, 1 = SD. */
+    /** Qualität aus dem Namen: 4 = 4K, 3 = FHD, 2 = HD, 1 = SD. Schnell, ohne Regex. */
     public static int qualityRank(String raw) {
-        String u = raw == null ? "" : raw.toUpperCase(java.util.Locale.ROOT);
-        if (u.matches(".*\\b(4K|UHD|2160P?)\\b.*")) return 4;
-        if (u.matches(".*\\b(FHD|FULL ?HD|1080P?)\\b.*")) return 3;
-        if (u.matches(".*\\b(SD|LOW|480P?|360P?)\\b.*")) return 1;
-        return 2;
+        if (raw == null || raw.isEmpty()) return 2;
+        int best = 0;
+        boolean low = false;
+        int n = raw.length();
+        int i = 0;
+        while (i < n) {
+            while (i < n && !Character.isLetterOrDigit(raw.charAt(i))) i++;
+            int st = i;
+            while (i < n && Character.isLetterOrDigit(raw.charAt(i))) i++;
+            int len = i - st;
+            if (len < 2 || len > 5) continue;
+            String t = raw.substring(st, i).toUpperCase(java.util.Locale.ROOT);
+            switch (t) {
+                case "4K": case "UHD": case "2160": case "2160P":
+                    best = Math.max(best, 4);
+                    break;
+                case "FHD": case "1080": case "1080P":
+                    best = Math.max(best, 3);
+                    break;
+                case "HD": case "720": case "720P":
+                    best = Math.max(best, 2);
+                    break;
+                case "SD": case "LOW": case "480": case "480P": case "360": case "360P":
+                    low = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (best > 0) return best;
+        return low ? 1 : 2;
     }
 
     public static String qualityLabel(int rank) {
@@ -434,36 +464,57 @@ public final class Library {
         }
     }
 
-    /**
-     * Alle Fassungen desselben Senders (z. B. „ZDF FHD“, „ZDF HD“, „ZDF SD“), beste zuerst.
-     * Damit kann die Qualität automatisch gesenkt oder von Hand gewählt werden.
-     */
-    public synchronized List<Model.Channel> variants(Model.Channel c) {
-        if (variantMap == null) {
-            variantMap = new HashMap<>();
-            for (Model.Channel x : channels) {
+    /** Baut die Fassungs-Tabelle. Läuft im Hintergrund (bei vielen Sendern dauert das). */
+    void prepareVariants(int gen) {
+        try {
+            List<Model.Channel> all = new ArrayList<>(channels);
+            Map<String, List<Model.Channel>> map = new HashMap<>();
+            for (Model.Channel x : all) {
                 String k = Names.key(x.rawName);
                 if (k.isEmpty()) continue;
-                List<Model.Channel> l = variantMap.get(k);
-                if (l == null) variantMap.put(k, l = new ArrayList<>());
+                List<Model.Channel> l = map.get(k);
+                if (l == null) map.put(k, l = new ArrayList<>(2));
                 l.add(x);
             }
-            for (List<Model.Channel> l : variantMap.values()) {
-                Collections.sort(l, (a, b) -> Integer.compare(qualityRank(b.rawName), qualityRank(a.rawName)));
+            // Nur Gruppen mit mehreren Fassungen behalten (spart Speicher)
+            Map<String, List<Model.Channel>> multi = new HashMap<>();
+            for (Map.Entry<String, List<Model.Channel>> e : map.entrySet()) {
+                if (e.getValue().size() > 1) multi.put(e.getKey(), e.getValue());
             }
+            synchronized (variantLock) {
+                if (gen != generation) return;
+                variantMap = multi;
+                variantGen = gen;
+            }
+        } catch (Throwable ignored) {
         }
-        List<Model.Channel> l = variantMap.get(Names.key(c.rawName));
-        if (l == null || l.size() < 2) {
-            List<Model.Channel> one = new ArrayList<>();
-            one.add(c);
-            return one;
-        }
-        // Nur echte Qualitätsunterschiede: höchstens eine Fassung pro Stufe
+    }
+
+    /**
+     * Alle Fassungen desselben Senders (z. B. „ZDF FHD“, „ZDF HD“, „ZDF SD“), beste zuerst.
+     * Blockiert nie: ist die Tabelle noch nicht fertig, gibt es nur den Sender selbst.
+     */
+    public List<Model.Channel> variants(Model.Channel c) {
         List<Model.Channel> out = new ArrayList<>();
-        java.util.Set<Integer> seen = new java.util.HashSet<>();
-        if (seen.add(qualityRank(c.rawName))) out.add(c);
-        for (Model.Channel x : l) if (x != c && seen.add(qualityRank(x.rawName))) out.add(x);
-        Collections.sort(out, (a, b) -> Integer.compare(qualityRank(b.rawName), qualityRank(a.rawName)));
+        out.add(c);
+        try {
+            Map<String, List<Model.Channel>> map = variantMap;
+            if (map == null) return out;
+            List<Model.Channel> l = map.get(Names.key(c.rawName));
+            if (l == null || l.size() < 2) return out;
+            // Nur echte Qualitätsunterschiede: höchstens eine Fassung pro Stufe
+            java.util.Set<Integer> seen = new java.util.HashSet<>();
+            seen.add(qualityRank(c.rawName));
+            for (Model.Channel x : l) if (x != c && seen.add(qualityRank(x.rawName))) out.add(x);
+            if (out.size() > 1) {
+                final Map<Model.Channel, Integer> rank = new HashMap<>();
+                for (Model.Channel x : out) rank.put(x, qualityRank(x.rawName));
+                Collections.sort(out, (a, b) -> Integer.compare(rank.get(b), rank.get(a)));
+            }
+        } catch (Throwable ignored) {
+            out.clear();
+            out.add(c);
+        }
         return out;
     }
 
