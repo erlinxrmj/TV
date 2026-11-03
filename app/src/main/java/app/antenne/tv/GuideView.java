@@ -171,7 +171,7 @@ public class GuideView extends View {
             float x = logoCol + (t - winStart) * ppm;
             if (x < logoCol - 1) continue;
             canvas.drawText(Ui.time(t), x + Ui.dp(c, 6), header - Ui.dp(c, 12), headerText);
-            fill.setColor(0x33FFFFFF);
+            fill.setColor(Ui.ink(0x33));
             canvas.drawRect(x, header - Ui.dp(c, 8), x + Ui.dp(c, 1), header - Ui.dp(c, 2), fill);
         }
 
@@ -210,7 +210,7 @@ public class GuideView extends View {
 
         // Logo-Kachel
         r.set(0, top, logoCol - Ui.dp(c, 10), bottom);
-        fill.setColor(sel ? 0x40FFFFFF : (i == selRow ? 0x26FFFFFF : 0x14FFFFFF));
+        fill.setColor(sel ? Ui.ink(0x40) : (i == selRow ? Ui.ink(0x26) : Ui.ink(0x14)));
         canvas.drawRoundRect(r, radius, radius, fill);
         float tileW = Ui.dp(c, 64), tileH = rowH - Ui.dp(c, 16);
         float tx = Ui.dp(c, 8), ty = top + (rowH - tileH) / 2f;
@@ -231,9 +231,9 @@ public class GuideView extends View {
         if (list == null || list.isEmpty()) {
             r.set(gridL + Ui.dp(c, 2), top, gridR, bottom);
             boolean focusBlock = sel;
-            fill.setColor(focusBlock ? 0xFFFFFFFF : 0x10FFFFFF);
+            fill.setColor(focusBlock ? Ui.FOCUS_BG : Ui.ink(0x10));
             canvas.drawRoundRect(r, radius, radius, fill);
-            title.setColor(focusBlock ? 0xFF111111 : Ui.TEXT3);
+            title.setColor(focusBlock ? Ui.FOCUS_FG : Ui.TEXT3);
             String t = list == null ? "Programm wird geladen …" : "Keine Programminfos";
             canvas.drawText(t, r.left + pad, top + rowH / 2f + Ui.dp(c, 5), title);
             return;
@@ -248,13 +248,13 @@ public class GuideView extends View {
             boolean isFocus = p == focusP;
             boolean live = p.isNow(now);
             boolean past = p.end <= now;
-            int bg = isFocus ? 0xFFFFFFFF : live ? 0x2EFFFFFF : past ? 0x0DFFFFFF : 0x1AFFFFFF;
+            int bg = isFocus ? Ui.FOCUS_BG : live ? Ui.ink(0x2E) : past ? Ui.ink(0x0D) : Ui.ink(0x1A);
             fill.setColor(bg);
             canvas.drawRoundRect(r, radius, radius, fill);
             if (live && !isFocus) {
                 // Fortschritt der laufenden Sendung als feine Linie unten
                 float px = x0 + (x1 - x0) * p.progress(now);
-                fill.setColor(0x66FFFFFF);
+                fill.setColor(Ui.ink(0x66));
                 canvas.drawRect(x0 + radius / 2, bottom - Ui.dp(c, 3), Math.max(x0 + radius / 2, px), bottom - Ui.dp(c, 1), fill);
             }
             float avail = x1 - x0 - pad * 2;
@@ -262,10 +262,10 @@ public class GuideView extends View {
             canvas.save();
             canvas.clipRect(r);
             String prefix = p.start < winStart ? "‹ " : "";
-            title.setColor(isFocus ? 0xFF111111 : past ? Ui.TEXT3 : Ui.TEXT);
+            title.setColor(isFocus ? Ui.FOCUS_FG : past ? Ui.TEXT3 : Ui.TEXT);
             String tt = TextUtils.ellipsize(prefix + p.title, title, avail, TextUtils.TruncateAt.END).toString();
             canvas.drawText(tt, x0 + pad, top + Ui.dp(c, 25), title);
-            small.setColor(isFocus ? 0x99111111 : Ui.TEXT3);
+            small.setColor(isFocus ? Ui.focusInk(0x99) : Ui.TEXT3);
             String st = TextUtils.ellipsize(Ui.time(p.start) + " – " + Ui.time(p.end), small, avail, TextUtils.TruncateAt.END).toString();
             canvas.drawText(st, x0 + pad, top + Ui.dp(c, 45), small);
             canvas.restore();
@@ -275,9 +275,9 @@ public class GuideView extends View {
             float x0 = Math.max(gridL, gridL + (floorHalf(cursor) - winStart) * ppm) + Ui.dp(c, 2);
             float x1 = Math.min(gridR, x0 + HALF_HOUR * ppm) - Ui.dp(c, 2);
             r.set(x0, top, x1, bottom);
-            fill.setColor(0xFFFFFFFF);
+            fill.setColor(Ui.FOCUS_BG);
             canvas.drawRoundRect(r, radius, radius, fill);
-            title.setColor(0xFF111111);
+            title.setColor(Ui.FOCUS_FG);
             canvas.drawText("—", x0 + pad, top + rowH / 2f + Ui.dp(c, 5), title);
         }
     }
